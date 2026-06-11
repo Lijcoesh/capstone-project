@@ -46,6 +46,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 from tqdm import tqdm
 
+from captum.attr import LayerGradCam
+
 from typing import List, Tuple, Dict, Optional
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
@@ -141,6 +143,11 @@ def parse_args() -> argparse.Namespace:
     # ── heart rate plot ──
     parser.add_argument("--save-hr-plot", type=Path, default=Path("heart_rate_seizures.png"),
                         help="Output path for the standalone heart rate + seizure plot.")
+    # ── grad-cam ──
+    parser.add_argument("--save-gradcam-plot", type=Path, default=Path("gradcam.png"),
+                        help="Output path for the Grad-CAM explanation plot.")
+    parser.add_argument("--gradcam-n-samples", type=int, default=4,
+                        help="Number of top seizure windows to explain with Grad-CAM.")
     return parser.parse_args()
 
 
@@ -940,6 +947,141 @@ def plot_results(
         plt.close(fig)
 
 
+# ── Grad-CAM ─────────────────────────────────────────────────────────────────
+
+def plot_gradcam(
+        model: SeizureCNN,
+        x_test: np.ndarray,
+        y_test: np.ndarray,
+        channel_names: list[str],
+        window_sec: float,
+        n_samples: int,
+        save_path: Path,
+        device: torch.device,
+        show: bool,
+) -> None:
+    seizure_windows = np.where(y_test == 1)[0]
+
+    if len(seizure_windows) == 0:
+        print("[GradCAM] No seizure windows in test set")
+        print("[GradCAM] Skipping...")
+        return
+
+    probabilities = predict_positive_prob(model, x_test, device)
+    seizure_probabilities = probabilities[seizure_windows]
+    best_seizure_windows = seizure_windows[
+        np.argsort(seizure_probabilities)[::-1][:n_samples]
+    ]
+
+    grad_cam = LayerGradCam(model, model.conv_block[10])
+    model.eval()
+
+    channels_to_plot = min(len(channel_names), 6)
+
+    time_axis = np.linspace(0, window_sec, x_test.shape[2])
+
+    colors = cm.tab10(np.linspace(0, 1, channels_to_plot))
+
+    fig, axes = plt.subplots(
+        len(best_seizure_windows),
+        1,
+        figsize=(11, 3.5 * len(best_seizure_windows)),
+        squeeze=False
+    )
+
+    for row, window_index in enumerate(best_seizure_windows):
+        ax = axes[row, 0]
+
+        input_window = torch.from_numpy(
+            x_test[window_index: window_index + 1]
+        ).to(device).requires_grad_(True)
+
+        attribution = grad_cam.attribute(input_window, target=1)
+
+        heatmap = attribution.mean(dim=1)
+        heatmap = heatmap.squeeze(0).detach().cpu().numpy()
+
+        heatmap = np.maximum(heatmap, 0)
+
+        # make heatmap values between 0 and 1
+        if heatmap.max() > 0:
+            heatmap = heatmap / heatmap.max()
+
+        # Stretch it back to the original time length.
+        heatmap_time_axis = np.linspace(0, window_sec, len(heatmap))
+        heatmap_resized = np.interp(time_axis, heatmap_time_axis, heatmap)
+
+        # Draw red background.
+        # Darker red means that time was more important.
+        for k in range(len(time_axis) - 1):
+            ax.axvspan(
+                time_axis[k],
+                time_axis[k + 1],
+                color=(1.0, 0.2, 0.2, float(heatmap_resized[k]) * 0.5),
+                linewidth=0
+            )
+
+        # Space the EEG channels vertically so they do not overlap
+        signal_range = np.max(np.ptp(x_test[window_index, :channels_to_plot], axis=1))
+        spacing = signal_range * 1.3 or 1.0
+        offsets = np.arange(channels_to_plot)[::-1] * spacing
+
+        # Draw the EEG signals
+        for channel_index in range(channels_to_plot):
+            ax.plot(
+                time_axis,
+                x_test[window_index, channel_index] + offsets[channel_index],
+                color=colors[channel_index],
+                linewidth=0.9,
+                label=channel_names[channel_index]
+                if channel_index < len(channel_names)
+                else f"ch{channel_index}"
+            )
+
+        ax.set_xlim(time_axis[0], time_axis[-1])
+        ax.set_yticks(offsets)
+        ax.set_yticklabels(channel_names[:channels_to_plot], fontsize=8)
+        ax.set_xlabel("Time within window (s)", fontsize=9)
+
+        ax.set_title(
+            f"Grad-CAM | test window #{window_index} | "
+            f"p(seizure)={probabilities[window_index]:.2f}",
+            fontsize=10
+        )
+
+        ax.grid(True, axis="x", alpha=0.25)
+
+    # colorbar explaining heatmap intensity
+    colorbar_source = plt.cm.ScalarMappable(
+        cmap=plt.cm.Reds,
+        norm=plt.Normalize(0, 1)
+    )
+    colorbar_source.set_array([])
+
+    fig.colorbar(
+        colorbar_source,
+        ax=axes[:, 0],
+        fraction=0.015,
+        pad=0.02,
+        label="Grad-CAM intensity"
+    )
+
+    fig.suptitle(
+        "Grad-CAM: most confident seizure predictions",
+        fontsize=11
+    )
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+
+    print(f"[GradCAM] Saved to {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
 def train_and_detect(args: argparse.Namespace) -> Metrics:
@@ -1148,6 +1290,19 @@ def train_and_detect(args: argparse.Namespace) -> Metrics:
         save_path=args.save_hr_plot,
         show=args.show,
         title_suffix=plot_edf_path.name,
+    )
+
+    # ── Grad-CAM explanation ──
+    plot_gradcam(
+        model=models[0],
+        x_test=x_test,
+        y_test=y_test,
+        channel_names=channel_names,
+        window_sec=args.window_sec,
+        n_samples=args.gradcam_n_samples,
+        save_path=args.save_gradcam_plot,
+        device=device,
+        show=args.show,
     )
 
     return Metrics(precision=precision, recall=recall, f1=f1, model_name="cnn")
