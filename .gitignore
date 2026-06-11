@@ -9,3 +9,6 @@ ENV/
 # Ignore Python bytecode
 __pycache__/
 *.pyc
+
+# The dataset is wayyyyy to big
+*.edf
