@@ -133,7 +133,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-gpu", action="store_true")
     parser.add_argument("--random-state", type=int, default=42)
     # ── model I/O ──
-    parser.add_argument("--save-model", type=Path, default=Path("../../models/seizure_cnn.pt"))
+    parser.add_argument("--save-model", type=Path, default=Path("../../models/seizure_detection/seizure_cnn.pt"))
     parser.add_argument("--load-model", type=Path, default=None)
     # ── ensemble / average seizure plot ──
     parser.add_argument("--ensemble-runs", type=int, default=1,
