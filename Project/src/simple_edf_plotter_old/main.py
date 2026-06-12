@@ -7,8 +7,8 @@ import mne
 import numpy as np
 
 
-DEFAULT_EDF = Path("physionet.org/files/chbmit/1.0.0/chb01/chb01_03.edf")
-DEFAULT_SUMMARY = Path("physionet.org/files/chbmit/1.0.0/chb01/chb01-summary.txt")
+DEFAULT_EDF = Path("../../data/physionet.org/files/chbmit/1.0.0/chb01/chb01_03.edf")
+DEFAULT_SUMMARY = Path("../../data/physionet.org/files/chbmit/1.0.0/chb01/chb01-summary.txt")
 
 
 def parse_args() -> argparse.Namespace:
@@ -162,6 +162,12 @@ def plot_with_seizure_overlays(
     ax.set_title(f"{edf_path.name} with seizure overlays ({start:.2f}-{end:.2f}s)")
     ax.grid(True, axis="x", alpha=0.3)
     fig.tight_layout()
+
+    # Use the / operator to cleanly join paths
+    save_path = Path("../../results/simple_edf_plotter_old") / save_path
+
+    # Optional: Ensure the target directory actually exists so savefig doesn't crash
+    save_path.parent.mkdir(parents=True, exist_ok=True)
 
     fig.savefig(save_path, dpi=150)
     print(f"Saved figure to: {save_path}")

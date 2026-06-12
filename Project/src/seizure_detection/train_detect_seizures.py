@@ -52,7 +52,7 @@ from typing import List, Tuple, Dict, Optional
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
-_BASE = Path("physionet.org/files/chbmit/1.0.0/")
+_BASE = Path(__file__).resolve().parent / "../../data/physionet.org/files/chbmit/1.0.0/"
 
 DEFAULT_EDFS = [
     _BASE / "chb01/chb01_03.edf",
@@ -133,7 +133,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-gpu", action="store_true")
     parser.add_argument("--random-state", type=int, default=42)
     # ── model I/O ──
-    parser.add_argument("--save-model", type=Path, default=Path("seizure_cnn.pt"))
+    parser.add_argument("--save-model", type=Path, default=Path("../../models/seizure_cnn.pt"))
     parser.add_argument("--load-model", type=Path, default=None)
     # ── ensemble / average seizure plot ──
     parser.add_argument("--ensemble-runs", type=int, default=1,
@@ -470,6 +470,9 @@ def predict_positive_prob(
 # ── Model I/O ─────────────────────────────────────────────────────────────────
 
 def save_model(model: SeizureCNN, path: Path, meta: dict) -> None:
+    # Force the path or ensure its parent directories are fully created
+    path.parent.mkdir(parents=True, exist_ok=True)
+
     torch.save({"state_dict": model.state_dict(), "meta": meta}, path)
     print(f"[Model] Saved to {path}")
 
@@ -710,6 +713,7 @@ def plot_heart_rate_with_seizures(
     ax.grid(True, axis="y", alpha=0.2)
 
     fig.tight_layout()
+    save_path = Path("../../results/seizure_detection") / save_path
     fig.savefig(save_path, dpi=150)
     print(f"[HeartRate] Saved standalone HR plot to {save_path}")
     if show:
@@ -777,6 +781,8 @@ def plot_average_seizure(
         fontsize=11,
     )
     fig.tight_layout()
+    save_path = Path("../../results/seizure_detection") / save_path
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=150)
     print(f"[AvgSeizure] Saved to {save_path}")
     if show:
@@ -939,6 +945,8 @@ def plot_results(
         cbar.set_label("bpm", fontsize=8)
 
     fig.tight_layout()
+    save_path = Path("../../results/seizure_detection") / save_path
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=150)
     print(f"[Plot] Saved to {save_path}")
     if show:
@@ -1072,6 +1080,8 @@ def plot_gradcam(
     )
 
     fig.tight_layout()
+    save_path = Path("../../results/seizure_detection") / save_path
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=150)
 
     print(f"[GradCAM] Saved to {save_path}")

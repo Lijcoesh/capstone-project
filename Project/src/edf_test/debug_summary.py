@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 
-SUMMARY = Path("physionet.org/files/chbmit/1.0.0/chb01/chb01-summary.txt")
+SUMMARY = Path("../data/physionet.org/files/chbmit/1.0.0/chb01/chb01-summary.txt")
 EDFS = [
     "chb01_03.edf", "chb01_04.edf", "chb01_15.edf",
     "chb01_16.edf", "chb01_18.edf", "chb01_21.edf", "chb01_26.edf",
