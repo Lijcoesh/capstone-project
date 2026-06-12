@@ -10,29 +10,6 @@ CNN-based seizure detector for CHB-MIT EDF files, with GPU support via WSL2.
 - Saves the trained model to disk for later reuse
 - Plots EEG traces with ground-truth seizure intervals (red) and CNN predictions (blue)
 
-## Setup
-
-### CPU only
-
-```powershell
-pip install -r requirements.txt
-```
-
-### GPU (WSL2 / Linux — CUDA 12.1)
-
-```bash
-pip install torch>=2.2 --index-url https://download.pytorch.org/whl/cu121
-pip install -r requirements.txt
-```
-
-Verify GPU is visible:
-
-```bash
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-```
-
-> **WSL2 note:** install the NVIDIA driver on Windows (≥ 512.xx) only — no separate CUDA toolkit inside WSL2 is needed.
-
 ## Run
 
 ```powershell
