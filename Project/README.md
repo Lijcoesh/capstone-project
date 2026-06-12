@@ -1,0 +1,7 @@
+- Project/            # Root
+- Project/data/       # raw and processed data
+- Project/notebooks/  # exploratory analysis
+- Project/src/        # reusable scripts 
+- Project/models/     # saved model files
+- Project/results     # outputs, figures, metrics
+- README.md
