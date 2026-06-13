@@ -12,7 +12,9 @@ import torch.nn as nn
 
 N_CHANNELS = 23
 N_TIMEPOINTS = 512
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "seizure_cnn.pt"
+DEFAULT_MODEL_PATH = (
+    Path(__file__).resolve().parent / "../../models/seizure_detection_eeg_ecg/seizure_cnn.pt"
+)
 
 # These bounds are based on typical human heart rates and the training data distribution.
 HR_MIN_BPM = 40.0
@@ -486,7 +488,8 @@ if __name__ == "__main__":
         hr,
         timestamps_s=times,
         plot=False,
-        plot_path=Path(__file__).resolve().parent / "seizure_heartrate_plot.png",
+        plot_path=Path(__file__).resolve().parent
+        / "../../results/seizure_detection_eeg_ecg/seizure_heartrate_plot.png",
     )
     print(format_seizure_summary(seizures))
     for s in seizures:

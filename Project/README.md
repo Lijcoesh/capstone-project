@@ -1,19 +1,15 @@
 ## Installation & Setup
 
-### Fast Automation (Recommended)
-An interactive setup script is provided for in the root directory to initialize the local Python virtual environment and fetch system dependencies:
+Install the Python dependencies:
 
 ```bash
-cd /src/
-chmod +x ./quick_setup.sh
-./quick_setup.sh
-source .venv/bin/activate
+pip install -r src/requirements.txt
 ```
 
-If you want to use an NVIDIA GPU for training, install PyTorch with CUDA support. This requires a compatible NVIDIA GPU and NVIDIA drivers installed on the host system.
+If you want to use an NVIDIA GPU for training, install the CUDA build of PyTorch. This requires a compatible NVIDIA GPU and NVIDIA drivers installed on the host system.
 
 ```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install torch==2.12.0 --index-url https://download.pytorch.org/whl/cu126
 ```
 
 Verify that PyTorch detects your GPU:

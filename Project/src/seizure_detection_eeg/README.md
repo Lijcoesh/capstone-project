@@ -11,8 +11,8 @@ A GPU-accelerated deep learning pipeline using a 1-D Convolutional Neural Networ
 * **Chronological Windowing:** Concatenates signal windows across files chronologically before performing the train/test split to completely prevent data leakage.
 * **Channel Alignment:** Performs a silent intersection of EEG channels, keeping only channels present across all loaded files.
 * **Hardware Acceleration:** Auto-detects the best available processing unit (CUDA -> MPS -> CPU).
-* **Advanced Ensembling:** Supports training an ensemble of N models via `--ensemble-runs`, utilizing majority-vote predictions.
-* **Synthetic Heart Rate Overlay:** Generates physiologically plausible heart rate data (resting ~60–75 bpm, shifting via a logarithmic curve up to an ictal peak of ~130–160 bpm) synced with seizure intervals and overlaid onto the evaluation plots.
+* **Advanced Ensembling:** Supports training an ensemble of N models via `--ensemble-runs`, averaging the predicted class probabilities across runs (soft voting).
+* **Synthetic Heart Rate Overlay:** Generates physiologically plausible heart rate data (resting ~60–75 bpm, shifting via a logarithmic curve up to an ictal peak of ~130–160 bpm) synced with seizure intervals and overlaid onto the evaluation plots — for visualization only, not a model input.
 * **Visualization:** Automatically extracts and exports average seizure morphology metrics (mean ± 1 SD) across channels.
 
 ---
@@ -20,13 +20,13 @@ A GPU-accelerated deep learning pipeline using a 1-D Convolutional Neural Networ
 ## Project Structure & Artifact Outputs
 
 All training outputs are automatically saved to the project's dedicated results architecture:
-* **Models:** Saved to `../../models/seizure_detection/seizure_cnn.pt` (configurable via `--save-model` / `--load-model`).
-* **Plots & Figures:** PNG artifacts (EEG overlays, Grad-CAM, average morphology) are written directly to `../../results/seizure_detection/`.
+* **Models:** Saved to `../../models/seizure_detection_eeg/seizure_cnn.pt` (configurable via `--save-model` / `--load-model`).
+* **Plots & Figures:** PNG artifacts (EEG overlays, Grad-CAM, average morphology) are written directly to `../../results/seizure_detection_eeg/`.
 
 ## Run
 
 ```powershell
-python .\train_detect_seizures.py
+python .\train_model_eeg.py
 ```
 
 ### Common options
@@ -37,7 +37,7 @@ python .\train_detect_seizures.py
 | `--summaries`         | `None` *(Auto-detected via parent dir)*         | Explicit path(s) to seizure summaries (one per unique subject folder)             |
 | `--window-sec`        | `2.0`                                           | Sliding window size in seconds                                                    |
 | `--step-sec`          | `1.0`                                           | Sliding window step size in seconds                                               |
-| `--train-frac`        | `0.7`                                           | Fraction of concatenated data used for training vs validation                     |
+| `--train-frac`        | `0.8`                                           | Fraction of concatenated data used for training (rest is held-out test); 80/20    |
 | `--epochs`            | `30`                                            | CNN training epochs                                                               |
 | `--batch-size`        | `64`                                            | Mini-batch size for training                                                      |
 | `--lr`                | `0.001` (`1e-3`)                                | Adam optimizer learning rate                                                      |
@@ -45,9 +45,9 @@ python .\train_detect_seizures.py
 | `--pred-min-run`      | `2`                                             | Minimum consecutive positive windows to keep after thresholding                   |
 | `--no-gpu`            | *disabled*                                      | Force CPU execution even if CUDA or MPS acceleration is available                 |
 | `--random-state`      | `42`                                            | Random seed for reproducibility across PyTorch and NumPy operations               |
-| `--save-model`        | `../../models/seizure_detection/seizure_cnn.pt` | Target file path to export the trained model weights and metadata                 |
+| `--save-model`        | `../../models/seizure_detection_eeg/seizure_cnn.pt` | Target file path to export the trained model weights and metadata                 |
 | `--load-model`        | `None`                                          | Path to load a pre-trained model checkpoint, skipping the training pipeline       |
-| `--ensemble-runs`     | `1`                                             | Train N independent models and aggregate via majority-vote predictions            |
+| `--ensemble-runs`     | `1`                                             | Train N independent models and aggregate by averaging class probabilities (soft voting) |
 | `--plot-edf`          | `None` *(Defaults to last --edf with seizures)* | Explicit path of the specific EDF file to generate visualization plots for        |
 | `--start`             | `0.0`                                           | Start time offset for evaluation plotting (seconds)                               |
 | `--duration`          | `60.0`                                          | Total duration window length for evaluation plotting (seconds)                    |
@@ -64,23 +64,23 @@ python .\train_detect_seizures.py
 Train and save a model:
 
 ```powershell
-python .\train_detect_chb01_01.py --epochs 50 --save-model seizure_cnn.pt
+python .\train_model_eeg.py --epochs 50 --save-model ../../models/seizure_detection_eeg/seizure_cnn.pt
 ```
 
 Load a saved model and plot a specific time window:
 
 ```powershell
-python train_detect_seizures.py --load-model ../../models/seizure_detection/seizure_cnn.pt --start 2000 --duration 120
+python train_model_eeg.py --load-model ../../models/seizure_detection_eeg/seizure_cnn.pt --start 2000 --duration 120
 ```
 
 Select specific channels:
 
 ```powershell
-python train_detect_seizures.py --channels "FP1-F7,F7-T7,T7-P7" --show
+python train_model_eeg.py --channels "FP1-F7,F7-T7,T7-P7" --show
 ```
 
 Force CPU:
 
 ```powershell
-python train_detect_seizures.py --no-gpu
+python train_model_eeg.py --no-gpu
 ```

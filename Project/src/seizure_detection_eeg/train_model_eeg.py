@@ -11,7 +11,7 @@ Seizure detection on CHB-MIT EEG data — multi-file edition.
   - Only channels present in ALL files are used (silent intersection).
   - Model: 1-D CNN in PyTorch; GPU auto-detected (CUDA → MPS → CPU).
   - Trained model saved with torch.save (--save-model / --load-model).
-  - Ensemble training via --ensemble-runs N (majority-vote predictions).
+  - Ensemble training via --ensemble-runs N (averaged class probabilities / soft voting).
   - Average seizure morphology plot saved to --save-seizure-plot.
   - Synthetic heart rate (resting ~60-75 bpm, seizure ~130-160 bpm) is generated
     using log-curve ramps around each seizure interval and overlaid on the EEG plot.
@@ -53,6 +53,11 @@ from typing import List, Tuple, Dict, Optional
 # ── Defaults ──────────────────────────────────────────────────────────────────
 
 _BASE = Path(__file__).resolve().parent / "../../data/physionet.org/files/chbmit/1.0.0/"
+
+# Power-line interference is ALWAYS removed as a standard preprocessing step.
+# CHB-MIT was recorded at Children's Hospital Boston (USA), where the mains
+# frequency is 60 Hz. Harmonics below the Nyquist frequency are removed as well.
+POWERLINE_NOTCH_HZ = 60.0
 
 DEFAULT_EDFS = [
     _BASE / "chb01/chb01_03.edf",
@@ -112,7 +117,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--window-sec", type=float, default=2.0)
     parser.add_argument("--step-sec", type=float, default=1.0)
-    parser.add_argument("--train-frac", type=float, default=0.7)
+    parser.add_argument("--train-frac", type=float, default=0.8,
+                        help="Fraction of the chronological sequence used for training "
+                             "(rest is held-out test). Default 0.8 = 80%% train / 20%% test.")
     # ── plot (applied to the last file by default) ──
     parser.add_argument("--plot-edf", type=Path, default=None,
                         help="Which EDF to plot. Defaults to the last --edf file with seizures.")
@@ -133,11 +140,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-gpu", action="store_true")
     parser.add_argument("--random-state", type=int, default=42)
     # ── model I/O ──
-    parser.add_argument("--save-model", type=Path, default=Path("../../models/seizure_detection/seizure_cnn.pt"))
+    parser.add_argument("--save-model", type=Path, default=Path("../../models/seizure_detection_eeg/seizure_cnn.pt"))
     parser.add_argument("--load-model", type=Path, default=None)
     # ── ensemble / average seizure plot ──
     parser.add_argument("--ensemble-runs", type=int, default=1,
-                        help="Train N models and majority-vote predictions (default: 1 = no ensemble).")
+                        help="Train N models and average their class probabilities / soft voting (default: 1 = no ensemble).")
     parser.add_argument("--save-seizure-plot", type=Path, default=Path("train_detect_chb01.png"),
                         help="Output path for the average seizure morphology plot (all files).")
     # ── heart rate plot ──
@@ -262,6 +269,25 @@ def resolve_channels(raw: mne.io.BaseRaw, channels_arg: str, max_channels: int) 
     return selected
 
 
+# ── Preprocessing ─────────────────────────────────────────────────────────────
+
+def apply_notch_filter(raw: mne.io.BaseRaw, notch_freq: float) -> None:
+    """
+    Remove power-line noise at *notch_freq* and its harmonics, in place.
+
+    No-op when notch_freq <= 0 (baseline / filtering disabled). Only harmonics
+    below the Nyquist frequency are filtered (CHB-MIT is sampled at 256 Hz →
+    Nyquist = 128 Hz, so for 60 Hz mains we notch 60 and 120 Hz).
+    """
+    if notch_freq <= 0:
+        return
+    nyquist = float(raw.info["sfreq"]) / 2.0
+    freqs = list(np.arange(notch_freq, nyquist, notch_freq))
+    if not freqs:
+        return
+    raw.notch_filter(freqs=freqs, verbose="ERROR")
+
+
 # ── Windowing ─────────────────────────────────────────────────────────────────
 
 def interval_overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
@@ -321,6 +347,7 @@ def build_multi_file_dataset(
 
     for edf_path in tqdm(edf_paths, desc="Loading files", unit="file"):
         raw = mne.io.read_raw_edf(str(edf_path), preload=True, verbose="ERROR")
+        apply_notch_filter(raw, POWERLINE_NOTCH_HZ)
         summary_path = summary_map[edf_path]
         seizures = parse_seizure_intervals(summary_path, edf_path.name)
         x, y, centers = build_window_dataset_single(
@@ -713,7 +740,7 @@ def plot_heart_rate_with_seizures(
     ax.grid(True, axis="y", alpha=0.2)
 
     fig.tight_layout()
-    save_path = Path("../../results/seizure_detection") / save_path
+    save_path = Path("../../results/seizure_detection_eeg") / save_path
     fig.savefig(save_path, dpi=150)
     print(f"[HeartRate] Saved standalone HR plot to {save_path}")
     if show:
@@ -781,7 +808,7 @@ def plot_average_seizure(
         fontsize=11,
     )
     fig.tight_layout()
-    save_path = Path("../../results/seizure_detection") / save_path
+    save_path = Path("../../results/seizure_detection_eeg") / save_path
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=150)
     print(f"[AvgSeizure] Saved to {save_path}")
@@ -945,7 +972,7 @@ def plot_results(
         cbar.set_label("bpm", fontsize=8)
 
     fig.tight_layout()
-    save_path = Path("../../results/seizure_detection") / save_path
+    save_path = Path("../../results/seizure_detection_eeg") / save_path
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=150)
     print(f"[Plot] Saved to {save_path}")
@@ -1080,7 +1107,7 @@ def plot_gradcam(
     )
 
     fig.tight_layout()
-    save_path = Path("../../results/seizure_detection") / save_path
+    save_path = Path("../../results/seizure_detection_eeg") / save_path
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=150)
 
@@ -1129,7 +1156,7 @@ def train_and_detect(args: argparse.Namespace) -> Metrics:
 
     # ── build dataset from all files ──
     x, y, centers, file_slices = build_multi_file_dataset(
-        args.edf, summary_map, channel_names, args.window_sec, args.step_sec
+        args.edf, summary_map, channel_names, args.window_sec, args.step_sec,
     )
     n_channels, n_timepoints = x.shape[1], x.shape[2]
 
@@ -1238,6 +1265,7 @@ def train_and_detect(args: argparse.Namespace) -> Metrics:
     predicted_intervals = windows_to_intervals(plot_centers, plot_pred, args.window_sec)
     plot_seizures       = parse_seizure_intervals(summary_map[plot_edf_path], plot_edf_path.name)
     raw_plot            = mne.io.read_raw_edf(str(plot_edf_path), preload=True, verbose="ERROR")
+    apply_notch_filter(raw_plot, POWERLINE_NOTCH_HZ)
     print(f"[Plot] {plot_edf_path.name}: GT intervals={len(plot_seizures)}  "
           f"Pred intervals={len(predicted_intervals)}")
 
