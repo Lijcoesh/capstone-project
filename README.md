@@ -50,7 +50,13 @@ Verify which device PyTorch will use (`True` = GPU available, `False` = CPU only
 python -c "import torch; print(torch.cuda.is_available())"
 ```
 
-The raw CHB-MIT EDF files are expected under `data/raw/physionet.org/files/chbmit/1.0.0/`.
+### Data
+
+The small annotation/metadata files (the `chbXX-summary.txt` seizure labels, `RECORDS`,
+`SUBJECT-INFO`, etc.) are **included in this repository**. The large raw EEG signals (the
+`.edf` files) are **not** committed — download them from
+[PhysioNet (CHB-MIT)](https://physionet.org/content/chbmit/1.0.0/) and place them under
+`data/raw/physionet.org/files/chbmit/1.0.0/` (the same folder layout PhysioNet provides).
 
 ## How the EEG-only pipeline works
 
