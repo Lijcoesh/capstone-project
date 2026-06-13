@@ -12,3 +12,4 @@ __pycache__/
 
 # The dataset is wayyyyy to big
 *.edf
+*.npz

@@ -11,7 +11,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--edf",
         type=Path,
-        default=Path("../../data/physionet.org/files/chbmit/1.0.0/chb01/chb01_03.edf"),
+        default=Path("../../data/raw/physionet.org/files/chbmit/1.0.0/chb01/chb01_03.edf"),
         help="Path to EDF file.",
     )
     parser.add_argument("--start", type=float, default=0.0, help="Start time in seconds.")
