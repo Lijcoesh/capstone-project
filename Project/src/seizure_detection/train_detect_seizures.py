@@ -714,6 +714,7 @@ def plot_heart_rate_with_seizures(
 
     fig.tight_layout()
     save_path = Path("../../results/seizure_detection") / save_path
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=150)
     print(f"[HeartRate] Saved standalone HR plot to {save_path}")
     if show:

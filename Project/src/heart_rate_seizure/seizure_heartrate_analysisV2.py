@@ -12,12 +12,11 @@ import torch.nn as nn
 
 N_CHANNELS = 23
 N_TIMEPOINTS = 512
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "seizure_cnn.pt"
+DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "../../models/seizure_detection/seizure_cnn.pt"
 
 # These bounds are based on typical human heart rates and the training data distribution.
 HR_MIN_BPM = 40.0
 HR_MAX_BPM = 162.0
-
 
 class SeizureCNN(nn.Module):
     def __init__(self, n_channels: int = N_CHANNELS, n_classes: int = 2):
@@ -414,6 +413,8 @@ def _plot_seizure_heartrate(
 
     fig.tight_layout()
     if plot_path is not None:
+        plot_path = Path("../../results/heart_rate_seizure") / plot_path
+        plot_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(plot_path, dpi=150, bbox_inches="tight")
 
 
@@ -486,7 +487,7 @@ if __name__ == "__main__":
         hr,
         timestamps_s=times,
         plot=False,
-        plot_path=Path(__file__).resolve().parent / "seizure_heartrate_plot.png",
+        plot_path=Path(__file__).resolve().parent / "../../results/heart_rate_seizure/seizure_heartrate_plot.png",
     )
     print(format_seizure_summary(seizures))
     for s in seizures:

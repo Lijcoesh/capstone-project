@@ -1,5 +1,8 @@
 ## Installation & Setup
 
+### Important
+Because of the fact we use a large dataset you'll need to download [GIT LFS (GIT Large File Storage)](https://git-lfs.com/) before you clone the repository.
+
 ### Fast Automation (Recommended)
 An interactive setup script is provided for in the root directory to initialize the local Python virtual environment and fetch system dependencies:
 
