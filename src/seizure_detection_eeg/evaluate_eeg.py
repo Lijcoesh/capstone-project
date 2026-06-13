@@ -44,6 +44,15 @@ from preprocess_eeg import (
 from train_model_eeg import SeizureCNN, DEFAULT_MODEL_PATH, pick_device
 
 RESULTS_DIR = Path(__file__).resolve().parent / "../../results/seizure_detection_eeg"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # .../src/seizure_detection_eeg -> repo root
+
+
+def _repo_relative(path: Path) -> str:
+    """Path relative to the repo root with forward slashes (portable, no machine-specific prefix)."""
+    try:
+        return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return Path(path).name
 
 
 # ── Model loading ─────────────────────────────────────────────────────────────
@@ -645,7 +654,7 @@ def evaluate(args: argparse.Namespace) -> None:
         "f1": round(f1, 4),
         "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp),
         "n_test": len(y_test), "n_test_seizure": int(y_test.sum()),
-        "model_path": str(args.model),
+        "model_path": _repo_relative(args.model),
     })
 
     # ── average seizure morphology (over all labelled seizure windows) ──
