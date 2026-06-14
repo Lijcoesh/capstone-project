@@ -1,10 +1,8 @@
-# A Comparative Study of EEG-Only vs. EEG-ECG Feature Sets for Seizure Prediction with a 1D Convolutional Neural Network
+# A Comparative Study of EEG-Only vs. EEG-ECG Feature Sets for Seizure Prediction Using a 1D Convolutional Neural Network
 
-Capstone project on epileptic-seizure detection from physiological signals. A 1-D
-Convolutional Neural Network is trained on the CHB-MIT dataset, and two feature sets are
-compared: an **EEG-only** model and an **EEG + ECG** model. The pipeline covers
-preprocessing, training, evaluation (precision / recall / F1 / confusion matrix), temporal
-post-processing, and Grad-CAM explainability.
+Capstone project on epileptic-seizure detection from physiological signals. A 1D
+Convolutional Neural Network is trained on the SeizeIT2 dataset, and two feature sets are compared: an **EEG-only** model and an **EEG + ECG** model. The pipeline covers
+preprocessing, training, evaluation (precision / recall / F1 / confusion matrix), temporal post-processing, and Grad-CAM explainability.
 
 ## Project structure
 

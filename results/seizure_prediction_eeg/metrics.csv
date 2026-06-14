@@ -1,0 +1,2 @@
+timestamp,feature_set,train_frac,epochs,random_state,n_runs,interictal_ratio,pred_threshold,pred_min_run,precision,recall,f1,auc_roc,auc_pr,train_f1,tn,fp,fn,tp,n_test,n_test_preictal,model_path
+2026-06-14T12:46:20,eeg,0.8,30,42,1,5.0,0.5,2,0.2828,0.2957,0.2891,0.454,0.2806,0.4437,30038,13512,12691,5328,61569,18019,models/seizure_prediction_eeg/seizure_cnn.pt
