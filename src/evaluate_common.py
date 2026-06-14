@@ -244,8 +244,16 @@ def run_evaluation(args: argparse.Namespace) -> None:
 
     models, meta = load_models(args.model, device)
     train_frac = args.train_frac if args.train_frac is not None else float(meta.get("train_frac", 0.8))
+    train_subjects = meta.get("train_subjects")  # list of subject IDs used during training
 
-    train_idx, test_idx = subject_aware_split(data, train_frac)
+    train_idx, test_idx = subject_aware_split(data, train_frac, train_subjects)
+    if train_subjects:
+        from preprocess_common import _subject_from_path
+        subj_of_all = np.empty(len(x), dtype=object)
+        for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
+            subj_of_all[s:e] = _subject_from_path(p)
+        test_subjects = sorted(set(subj_of_all[test_idx].tolist()))
+        print(f"  Test subjects: {', '.join(test_subjects)}")
     x_test, y_test = x[test_idx], y[test_idx]
     print(f"\nSubject-aware split (train_frac={train_frac})  ->  test windows={len(x_test)}  "
           f"(pre-ictal: {int(y_test.sum())})\n")

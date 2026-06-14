@@ -131,7 +131,11 @@ def add_training_args(parser: argparse.ArgumentParser, default_data: Path, defau
     parser.add_argument("--data", type=Path, default=default_data,
                         help="Path to the preprocessed dataset (.npz).")
     parser.add_argument("--train-frac", type=float, default=0.8,
-                        help="Fraction used for training (rest is held-out test). Default 0.8.")
+                        help="Fraction of subjects used for training (default 0.8 = first 80%% "
+                             "by subject ID). Ignored when --train-subjects is set.")
+    parser.add_argument("--train-subjects", type=str, default=None,
+                        help="Comma-separated subject IDs to use for training, e.g. "
+                             "'sub-001,sub-002,...,sub-016'. Overrides --train-frac.")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
@@ -156,12 +160,23 @@ def run_training(args: argparse.Namespace) -> None:
           f"notch={data['notch_freq']:.0f} Hz, window={data['window_sec']:.1f}s, "
           f"interictal_ratio={data['interictal_ratio']:.0f}")
 
-    # subject-aware split: per subject, first train_frac (chronological) -> train
-    train_idx, _ = subject_aware_split(data, args.train_frac)
+    # subject-level split
+    train_subjects = (
+        [s.strip() for s in args.train_subjects.split(",")]
+        if args.train_subjects else None
+    )
+    train_idx, _ = subject_aware_split(data, args.train_frac, train_subjects)
     x_train, y_train = x[train_idx], y[train_idx]
     n_channels, n_timepoints = x.shape[1], x.shape[2]
-    print(f"\nSubject-aware split: train={len(x_train)} of {len(x)} windows "
-          f"({int(y_train.sum())} pre-ictal).")
+
+    from preprocess_common import _subject_from_path
+    subj_of_all = np.empty(len(x), dtype=object)
+    for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
+        subj_of_all[s:e] = _subject_from_path(p)
+    train_subj_used = sorted(set(subj_of_all[train_idx].tolist()))
+    print(f"\nSubject-level split: {len(train_subj_used)} train subjects, "
+          f"train={len(x_train)} windows ({int(y_train.sum())} pre-ictal).")
+    print(f"  Train: {', '.join(train_subj_used)}")
 
     n_runs = max(1, args.ensemble_runs)
     models: list[SeizureCNN] = []
@@ -176,10 +191,11 @@ def run_training(args: argparse.Namespace) -> None:
 
     meta = {
         "task": "prediction",
-        "split": "subject_aware",
+        "split": "subject_level",
         "n_channels": n_channels,
         "n_timepoints": n_timepoints,
         "train_frac": args.train_frac,
+        "train_subjects": train_subj_used,
         "window_sec": data["window_sec"],
         "notch_freq": data["notch_freq"],
         "interictal_ratio": data["interictal_ratio"],

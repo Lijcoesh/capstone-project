@@ -345,35 +345,42 @@ def _subject_from_path(path) -> str:
     return Path(path).name.split("_")[0]
 
 
-def subject_aware_split(data: dict, train_frac: float) -> tuple[np.ndarray, np.ndarray]:
+def subject_aware_split(
+        data: dict,
+        train_frac: float = 0.8,
+        train_subjects: list[str] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Within-subject chronological split (standard for seizure prediction).
+    Subject-level split: every window of a subject goes *entirely* to train or
+    *entirely* to test — no subject appears in both sets.
 
-    For each subject, the first `train_frac` of their time-ordered windows go to
-    train and the remainder to test, so every subject appears in BOTH train and
-    test. Deterministic, so train and evaluate reconstruct the same split.
+    If `train_subjects` is provided, those subjects go to train and the rest to
+    test.  Otherwise the subjects are sorted by ID and the first `train_frac`
+    fraction is used for training (e.g. sub-001..sub-016 for 20 subjects at 0.8).
+
+    This avoids the chronological-window-split pitfall where pre-ictal windows
+    (which precede seizure onset) end up in train while the post-seizure
+    interictal tail fills the test set, leaving several subjects with zero
+    pre-ictal test windows.
 
     Returns sorted (train_idx, test_idx) into the concatenated window array.
     """
     n = len(data["X"])
     subj_of = np.empty(n, dtype=object)
-    order: list[str] = []
+    all_subjects: list[str] = []
     for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
         subj = _subject_from_path(p)
         subj_of[s:e] = subj
-        if subj not in order:
-            order.append(subj)
+        if subj not in all_subjects:
+            all_subjects.append(subj)
 
-    train_parts, test_parts = [], []
-    for subj in order:
-        idx = np.nonzero(subj_of == subj)[0]            # ascending = chronological
-        if len(idx) > 1:
-            k = min(max(int(round(len(idx) * train_frac)), 1), len(idx) - 1)
-        else:
-            k = len(idx)
-        train_parts.append(idx[:k])
-        test_parts.append(idx[k:])
+    if train_subjects is None:
+        sorted_subjects = sorted(all_subjects)
+        k = min(max(int(round(len(sorted_subjects) * train_frac)), 1),
+                len(sorted_subjects) - 1)
+        train_set = set(sorted_subjects[:k])
+    else:
+        train_set = set(train_subjects)
 
-    train_idx = np.sort(np.concatenate(train_parts)) if train_parts else np.array([], dtype=int)
-    test_idx = np.sort(np.concatenate(test_parts)) if test_parts else np.array([], dtype=int)
-    return train_idx, test_idx
+    train_mask = np.array([s in train_set for s in subj_of], dtype=bool)
+    return np.where(train_mask)[0], np.where(~train_mask)[0]
