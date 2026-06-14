@@ -241,6 +241,12 @@ def build_dataset(
     if subjects:
         wanted = set(subjects)
         recordings = [r for r in recordings if r.subject in wanted]
+    if include_ecg:
+        missing_ecg = [r.run for r in recordings if r.ecg_path is None]
+        if missing_ecg:
+            print(f"  [WARN] Skipping {len(missing_ecg)} recording(s) with no ECG file: "
+                  f"{', '.join(missing_ecg)}")
+        recordings = [r for r in recordings if r.ecg_path is not None]
     if not recordings:
         raise ValueError(f"No recordings found under {base}")
 
