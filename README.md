@@ -1,23 +1,33 @@
 # A Comparative Study of EEG-Only vs. EEG-ECG Feature Sets for Seizure Prediction Using a 1D Convolutional Neural Network
 
-Capstone project on epileptic-seizure detection from physiological signals. A 1D
-Convolutional Neural Network is trained on the SeizeIT2 dataset, and two feature sets are compared: an **EEG-only** model and an **EEG + ECG** model. The pipeline covers
-preprocessing, training, evaluation (precision / recall / F1 / confusion matrix), temporal post-processing, and Grad-CAM explainability.
+Capstone project on **epileptic-seizure prediction** from wearable physiological signals.
+A 1-D Convolutional Neural Network is trained on the **SeizeIT2** dataset, and two feature
+sets are compared under identical conditions: an **EEG-only** model (2 channels) and an
+**EEG + ECG** model (3 channels). Because both models use the same dataset, the only
+difference is the ECG channel — a controlled comparison of whether ECG adds predictive value.
+
+**Task.** Seizure *prediction* (not detection): each signal window is labeled **pre-ictal**
+(within 30 min before a seizure onset → positive) or **interictal** (far from any seizure →
+negative). The seizure itself and a post-ictal guard are excluded from training.
 
 ## Project structure
 
 ```
-capstone-project/        # repo root
+capstone-project/                # repo root
 ├── data/
-│   ├── raw/         # original CHB-MIT download (immutable, EDF via Git LFS)
-│   └── processed/   # preprocessed windowed dataset (.npz; regenerated, not committed)
+│   ├── raw/seizeit2/             # SeizeIT2 (BIDS); .edf signals not committed — see "Data"
+│   └── processed/                # cached windowed datasets (.npz; regenerated, not committed)
 ├── src/
-│   ├── seizure_detection_eeg/      # EEG-only pipeline (preprocess → train → evaluate)
-│   ├── seizure_detection_eeg_ecg/  # EEG + ECG pipeline (work in progress)
-│   └── simple_edf_plotter/         # EEG visualization utility
+│   ├── preprocess_common.py      # shared: BIDS discovery, pre-ictal labeling, windowing, 50 Hz notch, split
+│   ├── model_common.py           # shared: 1-D CNN + training
+│   ├── evaluate_common.py        # shared: metrics, per-subject AUC, Grad-CAM, report
+│   ├── seizure_prediction_eeg/       # EEG-only pipeline (preprocess → train → evaluate)
+│   ├── seizure_prediction_eeg_ecg/   # EEG + ECG pipeline (same scripts, +ECG channel)
+│   └── simple_edf_plotter/           # EDF visualization utility
 ├── models/          # saved model checkpoints, per pipeline
-├── results/         # figures, plots, and metrics.csv logs, per pipeline
+├── results/         # metrics.csv, per_subject.csv, reports/, plots, per pipeline
 ├── notebooks/       # results_analysis.ipynb — EEG vs EEG+ECG comparison figure
+├── docs/            # experiment_log.md — full record of decisions and runs
 ├── requirements.txt
 └── README.md
 ```
@@ -30,13 +40,12 @@ Install the Python dependencies:
 pip install -r requirements.txt
 ```
 
-This installs the **CPU build** of PyTorch, which works on any machine — no GPU
-required. The training scripts automatically fall back to the CPU; training just
-runs slower.
+This installs the **CPU build** of PyTorch, which works on any machine — no GPU required.
+The training scripts automatically fall back to the CPU; training just runs slower.
 
 **Optional — NVIDIA GPU acceleration.** If you have an NVIDIA (CUDA) GPU with drivers
-installed, additionally install the CUDA build of PyTorch. (pip cannot auto-detect a GPU
-from a requirements file, so this is a separate, one-time command.)
+installed, additionally install the CUDA build of PyTorch (pip cannot detect a GPU from a
+requirements file, so this is a separate, one-time command):
 
 ```bash
 pip install --force-reinstall torch==2.12.0 --index-url https://download.pytorch.org/whl/cu126
@@ -50,90 +59,77 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ### Data
 
-The small annotation/metadata files (the `chbXX-summary.txt` seizure labels, `RECORDS`,
-`SUBJECT-INFO`, etc.) are **included in this repository**. The large raw EEG signals (the
-`.edf` files) are **not** committed — download them from
-[PhysioNet (CHB-MIT)](https://physionet.org/content/chbmit/1.0.0/) and place them under
-`data/raw/physionet.org/files/chbmit/1.0.0/` (the same folder layout PhysioNet provides).
+The dataset is **SeizeIT2** ([OpenNeuro ds005873](https://openneuro.org/datasets/ds005873)),
+a BIDS-formatted wearable recording set: behind-the-ear EEG (2 ch), ECG (1 ch), EMG and
+movement, at 256 Hz, recorded in European EMUs. The small BIDS metadata and per-recording
+annotations (`events.tsv`) are included in this repo; the large `.edf` signals are **not**
+committed — download the dataset and place it under `data/raw/seizeit2/` (keeping the BIDS
+`sub-XXX/ses-01/{eeg,ecg}/…` layout).
 
-## How the EEG-only pipeline works
+## How the pipelines work
 
-The pipeline is split into three stages (one script each) for a clean separation of
-concerns. Run them in order from `src/seizure_detection_eeg/`:
+Each pipeline is three stages (one script each); the real logic lives in the shared
+`*_common.py` modules so the EEG and EEG+ECG arms differ only by the ECG channel.
 
-### 1. `preprocess_eeg.py` — raw EDFs → windowed dataset
+### 1. `preprocess_*` — raw EDFs → windowed dataset
 
-Reads the CHB-MIT EDF files and produces a single cached array, so preprocessing is
-decoupled from training (run once; train as often as you like). Steps:
+Reads the SeizeIT2 recordings and caches a single array (run once; train as often as you
+like). Steps:
 
-- **Power-line noise removal** — 60 Hz notch filter + harmonics below Nyquist (CHB-MIT was
-  recorded in Boston, US mains = 60 Hz).
-- **Channel alignment** — keeps only EEG channels present in *all* files (silent intersection).
-- **Sliding-window segmentation** — fixed-length windows (default 2 s, 1 s step).
+- **Power-line noise removal** — 50 Hz notch + harmonics (European mains).
+- **Sliding-window segmentation** — 2 s windows, 1 s step (512 timepoints at 256 Hz).
 - **Per-window, per-channel z-score normalization.**
-- **Labeling** — a window is *ictal* if ≥ 50 % of its duration overlaps a ground-truth
-  seizure interval (from the subject summary files), else *interictal*.
+- **Pre-ictal labeling** — pre-ictal = `[onset − 30 min, onset)` (positive); the seizure +
+  a 10 min post-ictal guard are excluded; everything else is interictal.
+- **Interictal subsampling** — recordings are ~18 h, so all pre-ictal windows are kept and
+  interictal is subsampled at a fixed ratio (`--interictal-ratio`, default 5:1).
 
-Windows from all files are concatenated chronologically and saved to
-`data/processed/eeg_windows.npz` (along with metadata: channels, sampling rate, window
-size, notch frequency, file boundaries).
+Output: `data/processed/eeg_windows.npz` (EEG) or `eeg_ecg_windows.npz` (EEG+ECG).
 
-### 2. `train_model_eeg.py` — train on the first 80 %
+### 2. `train_model_*` — train the CNN
 
-- Loads the `.npz` and takes the first **80 %** of the chronological sequence as the
-  training set (the split is chronological to avoid temporal leakage).
-- Trains a 1-D CNN. **Class imbalance** (~1.5 % seizure windows) is handled with positive
-  class weighting in the loss.
-- **Optional ensemble** (`--ensemble-runs N`): trains N independently initialized models;
-  their class probabilities are averaged at evaluation time (soft voting).
-- Saves the model to `models/seizure_detection_eeg/seizure_cnn.pt`. The split fraction is
-  stored in the checkpoint so evaluation reconstructs exactly the same test set.
+- **Subject-aware 80/20 split:** per subject, the first 80 % of their windows (chronological)
+  → train, the last 20 % → test, so every subject appears in both (within-subject prediction).
+  The split is deterministic and stored in the checkpoint.
+- **Class imbalance** is handled with positive class weighting in the loss.
+- **Optional ensemble** (`--ensemble-runs N`): N independently initialized models whose class
+  probabilities are averaged at evaluation (soft voting).
+- The 1-D CNN adapts automatically to the channel count (2 for EEG, 3 for EEG+ECG).
 
-### 3. `evaluate_eeg.py` — evaluate on the held-out 20 %
+### 3. `evaluate_*` — evaluate on the held-out 20 %
 
-- Loads the model + dataset and reconstructs the same **20 %** test set.
-- Computes **precision / recall / F1 / confusion matrix**.
-- **Temporal post-processing** removes isolated positive runs shorter than a minimum
-  duration (default 2 windows) to reduce false positives.
-- Appends one row of metrics + config to `results/seizure_detection_eeg/metrics.csv`.
-- Writes diagnostic plots (EEG overlay, average seizure morphology, synthetic heart-rate
-  overlay\*) and a **Grad-CAM** figure showing which time regions drove each prediction.
-
-\* The heart-rate trace in the EEG-only plots is *synthetic* (a visualization aid), not a
-model input. Real ECG features belong to the EEG + ECG pipeline.
+Reconstructs the same test set and reports a full diagnostic block: precision / recall / F1 /
+specificity, confusion matrix, **AUC-ROC / AUC-PR**, an over/underfit check (train vs test F1),
+a threshold sweep, and **per-subject AUC** (the headline metric — the pooled AUC is biased by
+per-patient probability scales). Outputs to `results/seizure_prediction_*/`:
+`metrics.csv` (one row per run), `per_subject.csv`, a timestamped report under `reports/`, an
+average pre-ictal window plot, and a **Grad-CAM** figure.
 
 ## Usage
 
 ```bash
-cd src/seizure_detection_eeg
+# EEG-only (from src/seizure_prediction_eeg)
+python preprocess_eeg.py      # -> data/processed/eeg_windows.npz (run once)
+python train_model_eeg.py     # subject-aware 80/20 split; default 30 epochs
+python evaluate_eeg.py        # -> metrics.csv, per_subject.csv, reports/, plots
 
-# 1. Preprocess raw EDFs -> data/processed/eeg_windows.npz (run once).
-python preprocess_eeg.py
-
-# 2. Train on the first 80% (vary --random-state for multiple seeds).
-python train_model_eeg.py --epochs 30 --random-state 42
-
-# 3. Evaluate on the held-out 20% (writes metrics.csv + plots + Grad-CAM).
-python evaluate_eeg.py
+# EEG + ECG (from src/seizure_prediction_eeg_ecg)
+python preprocess_eeg_ecg.py
+python train_model_eeg_ecg.py
+python evaluate_eeg_ecg.py
 ```
 
-Every script accepts `--help` for its full list of options, e.g.
-`python train_model_eeg.py --help`. For a robust comparison, repeat steps 2–3 across
-several `--random-state` values and report the mean ± std (a single run is noisy because
-the test set is essentially one recording).
+Every script accepts `--help` for its options. For a robust comparison, repeat
+train+evaluate across several `--random-state` seeds and report the mean ± std (single runs
+are noisy on these small per-subject test sets).
 
 ## Reporting
 
-Open `notebooks/results_analysis.ipynb` and run all cells. It reads the `metrics.csv`
-log(s), aggregates **mean ± std** across runs, and produces the EEG-only vs. EEG+ECG
-comparison figure and a paste-ready summary table for the paper.
-
-## EEG + ECG pipeline (work in progress)
-
-`src/seizure_detection_eeg_ecg/` will hold the combined model. It currently analyses a
-*simulated* heart-rate signal and will be extended with a real EEG+ECG dataset, following
-the same `preprocess → train → evaluate` structure as the EEG-only pipeline so the two
-feature sets can be compared fairly.
+Open `notebooks/results_analysis.ipynb` and run all cells. It reads each pipeline's
+`per_subject.csv` and `metrics.csv`, compares **per-subject AUC** between EEG and EEG+ECG
+(the comparison that answers the research question), and writes
+`results/comparison_eeg_vs_eeg_ecg.png`. A narrative record of all decisions and runs is in
+[`docs/experiment_log.md`](docs/experiment_log.md).
 
 ## Utility
 
