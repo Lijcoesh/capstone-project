@@ -160,7 +160,8 @@ def run_training(args: argparse.Namespace) -> None:
           f"notch={data['notch_freq']:.0f} Hz, window={data['window_sec']:.1f}s, "
           f"interictal_ratio={data['interictal_ratio']:.0f}")
 
-    # subject-level split
+    # within-subject class-stratified chronological split (default)
+    # or subject-level split when --train-subjects is given
     train_subjects = (
         [s.strip() for s in args.train_subjects.split(",")]
         if args.train_subjects else None
@@ -169,14 +170,11 @@ def run_training(args: argparse.Namespace) -> None:
     x_train, y_train = x[train_idx], y[train_idx]
     n_channels, n_timepoints = x.shape[1], x.shape[2]
 
-    from preprocess_common import _subject_from_path
-    subj_of_all = np.empty(len(x), dtype=object)
-    for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
-        subj_of_all[s:e] = _subject_from_path(p)
-    train_subj_used = sorted(set(subj_of_all[train_idx].tolist()))
-    print(f"\nSubject-level split: {len(train_subj_used)} train subjects, "
-          f"train={len(x_train)} windows ({int(y_train.sum())} pre-ictal).")
-    print(f"  Train: {', '.join(train_subj_used)}")
+    if train_subjects:
+        print(f"\nSubject-level split: train subjects = {', '.join(sorted(train_subjects))}")
+    else:
+        print(f"\nWithin-subject stratified split (train_frac={args.train_frac}): "
+              f"train={len(x_train):,} windows ({int(y_train.sum()):,} pre-ictal)")
 
     n_runs = max(1, args.ensemble_runs)
     models: list[SeizureCNN] = []
@@ -191,11 +189,11 @@ def run_training(args: argparse.Namespace) -> None:
 
     meta = {
         "task": "prediction",
-        "split": "subject_level",
+        "split": "subject_level" if train_subjects else "within_subject_stratified",
         "n_channels": n_channels,
         "n_timepoints": n_timepoints,
         "train_frac": args.train_frac,
-        "train_subjects": train_subj_used,
+        "train_subjects": train_subjects,
         "window_sec": data["window_sec"],
         "notch_freq": data["notch_freq"],
         "interictal_ratio": data["interictal_ratio"],

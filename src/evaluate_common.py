@@ -247,16 +247,18 @@ def run_evaluation(args: argparse.Namespace) -> None:
     train_subjects = meta.get("train_subjects")  # list of subject IDs used during training
 
     train_idx, test_idx = subject_aware_split(data, train_frac, train_subjects)
+    x_test, y_test = x[test_idx], y[test_idx]
+
     if train_subjects:
         from preprocess_common import _subject_from_path
         subj_of_all = np.empty(len(x), dtype=object)
         for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
             subj_of_all[s:e] = _subject_from_path(p)
         test_subjects = sorted(set(subj_of_all[test_idx].tolist()))
-        print(f"  Test subjects: {', '.join(test_subjects)}")
-    x_test, y_test = x[test_idx], y[test_idx]
-    print(f"\nSubject-aware split (train_frac={train_frac})  ->  test windows={len(x_test)}  "
-          f"(pre-ictal: {int(y_test.sum())})\n")
+        print(f"\nSubject-level split  ->  test subjects: {', '.join(test_subjects)}")
+    else:
+        print(f"\nWithin-subject stratified split (train_frac={train_frac})")
+    print(f"  test windows={len(x_test):,}  (pre-ictal: {int(y_test.sum()):,})\n")
 
     thr, min_run = args.pred_threshold, args.pred_min_run
     prob_test = average_positive_prob(models, x_test, device)

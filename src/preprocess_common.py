@@ -351,36 +351,54 @@ def subject_aware_split(
         train_subjects: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Subject-level split: every window of a subject goes *entirely* to train or
-    *entirely* to test — no subject appears in both sets.
+    Within-subject class-stratified chronological split.
 
-    If `train_subjects` is provided, those subjects go to train and the rest to
-    test.  Otherwise the subjects are sorted by ID and the first `train_frac`
-    fraction is used for training (e.g. sub-001..sub-016 for 20 subjects at 0.8).
+    For each subject, pre-ictal and interictal windows are split independently:
+    the first `train_frac` fraction of each class (chronological order) → train,
+    the remainder → test.  This guarantees every subject with seizures has
+    pre-ictal windows in the test set, while staying strictly chronological
+    within each class (no look-ahead / temporal leakage).
 
-    This avoids the chronological-window-split pitfall where pre-ictal windows
-    (which precede seizure onset) end up in train while the post-seizure
-    interictal tail fills the test set, leaving several subjects with zero
-    pre-ictal test windows.
+    Contrast with a plain chronological window split: pre-ictal windows precede
+    seizure onset, so the post-seizure interictal tail fills the last 20% and
+    subjects whose seizures fall early end up with zero pre-ictal test windows.
+
+    If `train_subjects` is provided (list of subject IDs), a subject-level split
+    is used instead: all windows of those subjects → train, all others → test.
 
     Returns sorted (train_idx, test_idx) into the concatenated window array.
     """
     n = len(data["X"])
+    y = data["y"]
     subj_of = np.empty(n, dtype=object)
-    all_subjects: list[str] = []
+    order: list[str] = []
     for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
         subj = _subject_from_path(p)
         subj_of[s:e] = subj
-        if subj not in all_subjects:
-            all_subjects.append(subj)
+        if subj not in order:
+            order.append(subj)
 
-    if train_subjects is None:
-        sorted_subjects = sorted(all_subjects)
-        k = min(max(int(round(len(sorted_subjects) * train_frac)), 1),
-                len(sorted_subjects) - 1)
-        train_set = set(sorted_subjects[:k])
-    else:
+    # ── subject-level split (optional override) ────────────────────────────────
+    if train_subjects is not None:
         train_set = set(train_subjects)
+        train_mask = np.array([s in train_set for s in subj_of], dtype=bool)
+        return np.where(train_mask)[0], np.where(~train_mask)[0]
 
-    train_mask = np.array([s in train_set for s in subj_of], dtype=bool)
-    return np.where(train_mask)[0], np.where(~train_mask)[0]
+    # ── within-subject class-stratified chronological split (default) ──────────
+    train_parts, test_parts = [], []
+    for subj in order:
+        idx = np.nonzero(subj_of == subj)[0]   # already ascending = chronological
+        for cls in (1, 0):                       # 1 = pre-ictal, 0 = interictal
+            cls_idx = idx[y[idx] == cls]
+            if len(cls_idx) == 0:
+                continue
+            if len(cls_idx) == 1:
+                train_parts.append(cls_idx)     # single window → keep in train
+                continue
+            k = min(max(int(round(len(cls_idx) * train_frac)), 1), len(cls_idx) - 1)
+            train_parts.append(cls_idx[:k])
+            test_parts.append(cls_idx[k:])
+
+    train_idx = np.sort(np.concatenate(train_parts)) if train_parts else np.array([], dtype=int)
+    test_idx  = np.sort(np.concatenate(test_parts))  if test_parts  else np.array([], dtype=int)
+    return train_idx, test_idx
