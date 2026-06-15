@@ -8,11 +8,13 @@ train_model_*.py wrappers only set the dataset/model paths and call run_training
 """
 
 import argparse
+import copy
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
@@ -72,6 +74,21 @@ def pick_device(no_gpu: bool) -> torch.device:
 
 # ── Training ──────────────────────────────────────────────────────────────────
 
+@torch.no_grad()
+def _val_positive_prob(model: SeizureCNN, x: np.ndarray, device: torch.device,
+                       batch_size: int, amp_on: bool) -> np.ndarray:
+    """p(pre-ictal) over a held-out array, batched (keeps VRAM low; x stays on CPU)."""
+    model.eval()
+    probs = []
+    for i in range(0, len(x), batch_size):
+        xb = torch.from_numpy(x[i:i + batch_size]).to(device)
+        with torch.amp.autocast("cuda", enabled=amp_on):
+            out = model(xb)
+        probs.append(torch.softmax(out.float(), dim=1)[:, 1].cpu().numpy())
+    model.train()
+    return np.concatenate(probs) if probs else np.empty(0, np.float32)
+
+
 def train_model(
         x_train: np.ndarray,
         y_train: np.ndarray,
@@ -80,6 +97,10 @@ def train_model(
         batch_size: int,
         lr: float,
         random_state: int,
+        x_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+        patience: int = 5,
+        use_amp: bool = True,
 ) -> SeizureCNN:
     torch.manual_seed(random_state)
     np.random.seed(random_state)
@@ -95,9 +116,23 @@ def train_model(
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
-    X_t = torch.from_numpy(x_train).to(device)
-    y_t = torch.from_numpy(y_train).to(device)
-    dl = DataLoader(TensorDataset(X_t, y_t), batch_size=batch_size, shuffle=True)
+    # Mixed precision ~2x on CUDA; silently a no-op on CPU/MPS.
+    amp_on = bool(use_amp) and device.type == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=amp_on)
+
+    # Keep the full training set in CPU RAM and move only each batch to the GPU.
+    # Moving the whole set with .to(device) OOMs on small cards (e.g. 4 GB laptop
+    # GPUs) once the cohort is large; per-batch transfer is a tiny PCIe copy.
+    pin = device.type == "cuda"
+    dl = DataLoader(TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train)),
+                    batch_size=batch_size, shuffle=True, pin_memory=pin)
+
+    # Early stopping on validation AUC (ranking quality, the metric we report). The
+    # model underfits more than it overfits here, so this mostly saves time: it stops
+    # once val-AUC plateaus instead of always running all `epochs`.
+    can_early_stop = (x_val is not None and y_val is not None
+                      and len(x_val) > 0 and len(np.unique(y_val)) > 1)
+    best_auc, best_state, no_improve, best_epoch = -1.0, None, 0, 0
 
     model.train()
     epoch_bar = tqdm(range(1, epochs + 1), desc="Training", unit="epoch")
@@ -105,14 +140,38 @@ def train_model(
         total_loss = 0.0
         batch_bar = tqdm(dl, desc=f"  Epoch {epoch:3d}", unit="batch", leave=False)
         for xb, yb in batch_bar:
-            optimizer.zero_grad()
-            loss = criterion(model(xb), yb)
-            loss.backward()
-            optimizer.step()
+            xb = xb.to(device, non_blocking=pin)
+            yb = yb.to(device, non_blocking=pin)
+            optimizer.zero_grad(set_to_none=True)
+            with torch.amp.autocast("cuda", enabled=amp_on):
+                loss = criterion(model(xb), yb)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             total_loss += loss.item() * len(xb)
             batch_bar.set_postfix(loss=f"{loss.item():.4f}")
         scheduler.step()
-        epoch_bar.set_postfix(loss=f"{total_loss / len(x_train):.4f}")
+
+        if can_early_stop:
+            val_auc = roc_auc_score(
+                y_val, _val_positive_prob(model, x_val, device, batch_size * 4, amp_on))
+            epoch_bar.set_postfix(loss=f"{total_loss / len(x_train):.4f}",
+                                  val_auc=f"{val_auc:.4f}", best=f"{best_auc:.4f}")
+            if val_auc > best_auc + 1e-4:
+                best_auc, best_epoch, no_improve = val_auc, epoch, 0
+                best_state = copy.deepcopy(model.state_dict())
+            else:
+                no_improve += 1
+                if no_improve >= patience:
+                    print(f"\n[EarlyStop] No val-AUC gain for {patience} epochs; "
+                          f"stopping at epoch {epoch} (best {best_auc:.4f} @ epoch {best_epoch}).")
+                    break
+        else:
+            epoch_bar.set_postfix(loss=f"{total_loss / len(x_train):.4f}")
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        print(f"[BestModel] Restored val-AUC {best_auc:.4f} from epoch {best_epoch}.")
 
     return model
 
@@ -130,15 +189,25 @@ def save_models(models: list[SeizureCNN], path: Path, meta: dict) -> None:
 def add_training_args(parser: argparse.ArgumentParser, default_data: Path, default_model: Path) -> None:
     parser.add_argument("--data", type=Path, default=default_data,
                         help="Path to the preprocessed dataset (.npz).")
-    parser.add_argument("--train-frac", type=float, default=0.8,
-                        help="Fraction of subjects used for training (default 0.8 = first 80%% "
-                             "by subject ID). Ignored when --train-subjects is set.")
+    parser.add_argument("--train-frac", type=float, default=0.6,
+                        help="Fraction of each subject's windows (chronological) used for "
+                             "training (default 0.6). Ignored when --train-subjects is set.")
+    parser.add_argument("--val-frac", type=float, default=0.2,
+                        help="Fraction used for validation, taken right after the train block "
+                             "(default 0.2). The remaining 1-train-val is the held-out test set.")
     parser.add_argument("--train-subjects", type=str, default=None,
                         help="Comma-separated subject IDs to use for training, e.g. "
                              "'sub-001,sub-002,...,sub-016'. Overrides --train-frac.")
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--epochs", type=int, default=30,
+                        help="Max epochs; early stopping usually halts well before this.")
+    parser.add_argument("--patience", type=int, default=5,
+                        help="Early-stop after this many epochs without val-AUC improvement "
+                             "(default 5). Ignored when there is no validation set.")
+    parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--no-amp", action="store_true",
+                        help="Disable CUDA mixed-precision (AMP). AMP is ~2x faster and on "
+                             "by default; use this only to rule it out as a cause of issues.")
     parser.add_argument("--no-gpu", action="store_true")
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--ensemble-runs", type=int, default=1,
@@ -150,6 +219,10 @@ def add_training_args(parser: argparse.ArgumentParser, default_data: Path, defau
 def run_training(args: argparse.Namespace) -> None:
     if not (0.1 <= args.train_frac < 1.0):
         raise ValueError("--train-frac must be in [0.1, 1.0)")
+    if not (0.0 <= args.val_frac < 1.0):
+        raise ValueError("--val-frac must be in [0.0, 1.0)")
+    if args.train_frac + args.val_frac >= 1.0:
+        raise ValueError("--train-frac + --val-frac must be < 1.0 (leave room for test)")
 
     device = pick_device(args.no_gpu)
 
@@ -166,15 +239,19 @@ def run_training(args: argparse.Namespace) -> None:
         [s.strip() for s in args.train_subjects.split(",")]
         if args.train_subjects else None
     )
-    train_idx, _ = subject_aware_split(data, args.train_frac, train_subjects)
+    train_idx, val_idx, _ = subject_aware_split(
+        data, args.train_frac, args.val_frac, train_subjects)
     x_train, y_train = x[train_idx], y[train_idx]
+    x_val, y_val = x[val_idx], y[val_idx]
     n_channels, n_timepoints = x.shape[1], x.shape[2]
 
     if train_subjects:
         print(f"\nSubject-level split: train subjects = {', '.join(sorted(train_subjects))}")
     else:
-        print(f"\nWithin-subject stratified split (train_frac={args.train_frac}): "
-              f"train={len(x_train):,} windows ({int(y_train.sum()):,} pre-ictal)")
+        print(f"\nWithin-subject 3-way split (train={args.train_frac}, val={args.val_frac}, "
+              f"test={1 - args.train_frac - args.val_frac:.2f}): "
+              f"train={len(x_train):,} windows ({int(y_train.sum()):,} pre-ictal), "
+              f"val={len(val_idx):,}")
 
     n_runs = max(1, args.ensemble_runs)
     models: list[SeizureCNN] = []
@@ -185,6 +262,8 @@ def run_training(args: argparse.Namespace) -> None:
             x_train, y_train, device,
             epochs=args.epochs, batch_size=args.batch_size,
             lr=args.lr, random_state=run_seed,
+            x_val=x_val, y_val=y_val,
+            patience=args.patience, use_amp=not args.no_amp,
         ))
 
     meta = {
@@ -193,6 +272,7 @@ def run_training(args: argparse.Namespace) -> None:
         "n_channels": n_channels,
         "n_timepoints": n_timepoints,
         "train_frac": args.train_frac,
+        "val_frac": args.val_frac,
         "train_subjects": train_subjects,
         "window_sec": data["window_sec"],
         "notch_freq": data["notch_freq"],
@@ -200,6 +280,8 @@ def run_training(args: argparse.Namespace) -> None:
         "preictal_sec": data["preictal_sec"],
         "n_runs": n_runs,
         "epochs": args.epochs,
+        "patience": args.patience,
+        "amp": not args.no_amp,
         "random_state": args.random_state,
         "lr": args.lr,
         "batch_size": args.batch_size,

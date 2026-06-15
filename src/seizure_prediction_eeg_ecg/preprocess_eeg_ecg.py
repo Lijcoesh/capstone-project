@@ -22,8 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from preprocess_common import (  # noqa: E402
     DEFAULT_INTERICTAL_RATIO,
+    DEFAULT_NORMALIZE,
     DEFAULT_STEP_SEC,
     DEFAULT_WINDOW_SEC,
+    NORMALIZE_CHOICES,
+    PREICTAL_SEC,
     build_dataset,
     load_preprocessed,
     save_preprocessed,
@@ -42,6 +45,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--interictal-ratio", type=float, default=DEFAULT_INTERICTAL_RATIO,
                         help="Interictal : pre-ictal windows kept (default 5).")
+    parser.add_argument("--preictal-min", type=float, default=PREICTAL_SEC / 60.0,
+                        help="Pre-ictal horizon in minutes: windows within this many "
+                             f"minutes before onset = positive (default {PREICTAL_SEC / 60:.0f}).")
+    parser.add_argument("--normalize", choices=NORMALIZE_CHOICES, default=DEFAULT_NORMALIZE,
+                        help="Window normalization: 'per_window' (default) z-scores each "
+                             "window; 'per_recording' uses one mean/std per channel over "
+                             "the whole recording (keeps cross-window amplitude dynamics).")
     parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC)
     parser.add_argument("--step-sec", type=float, default=DEFAULT_STEP_SEC)
     parser.add_argument("--subjects", type=str, nargs="+", default=None,
@@ -60,6 +70,8 @@ def main() -> None:
         step_sec=args.step_sec,
         subjects=args.subjects,
         random_state=args.random_state,
+        preictal_sec=args.preictal_min * 60.0,
+        normalize=args.normalize,
     )
     save_preprocessed(args.out, result)
 

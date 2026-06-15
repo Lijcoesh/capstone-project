@@ -1,0 +1,38 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.5
+  model=models/seizure_prediction_eeg/seizure_cnn_pre10.pt   epochs=30   seed=42
+============================================================
+  Precision      : 0.203
+  Recall (sens.) : 0.550
+  Specificity    : 0.569
+  F1             : 0.297
+  Balanced acc   : 0.560
+  Confusion [tn fp fn tp]: [10942 8277 1730 2114]
+
+  AUC-ROC        : 0.566   (0.50 = chance)
+  AUC-PR         : 0.234   (baseline 0.167 = positive rate)
+
+  Over/underfit  : train F1 0.467  vs  test F1 0.297  (gap +0.170)
+
+  Threshold sweep (P / R / F1):
+    thr 0.2:  P 0.174   R 0.948   F1 0.294
+    thr 0.3:  P 0.178   R 0.895   F1 0.298
+    thr 0.4:  P 0.187   R 0.780   F1 0.302
+    thr 0.5:  P 0.203   R 0.550   F1 0.297  <-- current
+    thr 0.6:  P 0.243   R 0.266   F1 0.254
+    thr 0.7:  P 0.345   R 0.106   F1 0.162
+    thr 0.8:  P 0.638   R 0.056   F1 0.103
+
+  Per-subject test (AUC = within-patient ranking quality):
+    sub-001:  AUC 0.620   P 0.247   R 0.221   F1 0.233   (n_preictal 480 / 2880)
+    sub-002:  AUC 0.523   P 0.187   R 0.644   F1 0.290   (n_preictal 1684 / 10103)
+    sub-003:  AUC 0.461   P 0.173   R 0.500   F1 0.257   (n_preictal 120 / 720)
+    sub-004:  AUC 0.351   P 0.113   R 0.308   F1 0.166   (n_preictal 480 / 2880)
+    sub-005:  AUC 0.934   P 0.557   R 0.917   F1 0.693   (n_preictal 240 / 1440)
+    sub-006:  AUC 0.708   P 0.445   R 0.508   F1 0.475   (n_preictal 120 / 720)
+    sub-007:  AUC 0.583   P 0.222   R 0.562   F1 0.319   (n_preictal 240 / 1440)
+    sub-008:  AUC 0.549   P 0.196   R 0.575   F1 0.292   (n_preictal 240 / 1440)
+    sub-009:  AUC 0.905   P 0.276   R 0.975   F1 0.430   (n_preictal 120 / 720)
+    sub-010:  AUC 0.450   P 0.171   R 0.358   F1 0.231   (n_preictal 120 / 720)
+    mean per-subject AUC (subjects with positives): 0.608 ± 0.181  (n=10)
+============================================================
