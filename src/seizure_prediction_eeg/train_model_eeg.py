@@ -20,7 +20,7 @@ from model_common import add_training_args, run_training  # noqa: E402
 from preprocess_eeg import DEFAULT_PREPROCESSED_PATH       # noqa: E402
 
 DEFAULT_MODEL_PATH = (
-    Path(__file__).resolve().parent / "../../models/seizure_prediction_eeg/seizure_cnn.pt"
+    Path(__file__).resolve().parent / "../../models/seizure_prediction_eeg/cnn_prediction_eeg.pt"
 )
 
 
