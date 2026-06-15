@@ -1,0 +1,16 @@
+EEG vs EEG+ECG  |  split=TEST  |  6 seeds + final ensemble
+
+metric                            EEG (mean±std)  EEG+ECG (mean±std)        Δ
+-----------------------------------------------------------------------------
+pooled AUC-ROC                   0.580±0.005       0.573±0.007       -0.007
+mean per-subject AUC             0.500±0.015       0.521±0.017       +0.021
+mean per-subj AUC (smoothed)     0.523±0.022       0.547±0.026       +0.024
+F1 (thr 0.5)                     0.307±0.002       0.293±0.010       -0.014
+
+Final ensemble (single point estimate):
+  pooled AUC-ROC              EEG   0.586   EEG+ECG   0.576   Δ  -0.010
+  mean per-subject AUC        EEG   0.497   EEG+ECG   0.519   Δ  +0.022
+  mean per-subj AUC (smoothed)EEG   0.521   EEG+ECG   0.545   Δ  +0.023
+  F1 (thr 0.5)                EEG   0.310   EEG+ECG   0.289   Δ  -0.021
+
+Δ = EEG+ECG − EEG   (positive = ECG helps)
