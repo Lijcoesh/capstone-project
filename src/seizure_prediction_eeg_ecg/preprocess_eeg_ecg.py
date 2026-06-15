@@ -8,9 +8,8 @@ logic (BIDS discovery, pre-ictal labeling, 50 Hz notch, interictal subsampling)
 lives in preprocess_common so the EEG-only and EEG+ECG pipelines stay identical
 apart from the ECG channel.
 
-Example:
+Use:
   python preprocess_eeg_ecg.py
-  python preprocess_eeg_ecg.py --interictal-ratio 10 --subjects sub-001 sub-002
 """
 
 import argparse

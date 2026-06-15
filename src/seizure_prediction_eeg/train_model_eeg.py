@@ -3,11 +3,11 @@
 Train the EEG-only seizure-prediction CNN (SeizeIT2).
 
 Thin wrapper: the training logic lives in model_common; this just sets the
-EEG-only dataset/model paths. Trains on the first 80% (chronological) and saves
-the model.
+EEG-only dataset/model paths. Uses the within-subject 60/20/20 split (train on
+the first 60% chronological, validate on the next 20%) and saves the model.
 
-Example:
-  python train_model_eeg.py --epochs 30 --random-state 42
+Use:
+  python train_model_eeg.py
 """
 
 import argparse

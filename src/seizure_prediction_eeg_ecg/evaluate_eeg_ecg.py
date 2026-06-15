@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Evaluate the EEG + ECG seizure-prediction model on the held-out 20% test set.
+Evaluate the EEG + ECG seizure-prediction model on a held-out split
+(--eval-split: validation by default for tuning, or test for the final run).
 
 Thin wrapper: the evaluation logic lives in evaluate_common; this just sets the
 EEG+ECG dataset/model/results paths and the feature-set label ('eeg_ecg') written
 to metrics.csv, so the notebook can compare EEG vs EEG+ECG.
 
-Example:
+Use:
   python evaluate_eeg_ecg.py
 """
 

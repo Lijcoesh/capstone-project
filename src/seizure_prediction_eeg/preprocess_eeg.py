@@ -7,9 +7,8 @@ windowed dataset to data/processed/eeg_windows.npz. All logic (BIDS discovery,
 pre-ictal labeling, 50 Hz notch, interictal subsampling) lives in preprocess_common
 so the EEG-only and EEG+ECG pipelines differ by nothing but the ECG channel.
 
-Example:
+Use:
   python preprocess_eeg.py
-  python preprocess_eeg.py --interictal-ratio 10 --subjects sub-001 sub-002
 """
 
 import argparse

@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Evaluate the EEG-only seizure-prediction model on the held-out 20% test set.
+Evaluate the EEG-only seizure-prediction model on a held-out split
+(--eval-split: validation by default for tuning, or test for the final run).
 
 Thin wrapper: the evaluation logic lives in evaluate_common; this just sets the
 EEG-only dataset/model/results paths and the feature-set label written to
 metrics.csv.
 
-Example:
+Use:
   python evaluate_eeg.py
-  python evaluate_eeg.py --pred-threshold 0.4
 """
 
 import argparse

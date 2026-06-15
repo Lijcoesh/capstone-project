@@ -47,10 +47,11 @@ DEFAULT_STEP_SEC = 1.0
 
 # Window normalization scheme:
 #   "per_window"    — z-score each 2 s window independently (removes within-window
-#                     amplitude; the original default).
+#                     amplitude).
 #   "per_recording" — z-score with one mean/std per channel over the whole recording
 #                     (keeps amplitude/power dynamics across windows; only removes the
-#                     per-patient/per-electrode scale).
+#                     per-patient/per-electrode scale). This is the default — it scored
+#                     higher on validation AUC than per_window.
 NORMALIZE_CHOICES = ("per_window", "per_recording")
 DEFAULT_NORMALIZE = "per_recording"
 

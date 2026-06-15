@@ -13,7 +13,7 @@ hand-crafted EEG feature set a tree model can use (a RF on a raw 512-sample wave
 meaningless). For EEG+ECG the extra ECG channel contributes the same five band-powers,
 so the EEG-vs-EEG+ECG contrast is preserved for the baseline too.
 
-Example:
+Use:
   python src/baseline_rf.py --data data/processed/eeg_windows.npz --feature-set eeg
   python src/baseline_rf.py --data data/processed/eeg_ecg_windows.npz --feature-set eeg_ecg
 """

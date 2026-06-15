@@ -6,8 +6,8 @@ Thin wrapper: the training logic lives in model_common; this just sets the
 EEG+ECG dataset/model paths. Identical to the EEG-only trainer apart from the
 3-channel input (the CNN adapts automatically).
 
-Example:
-  python train_model_eeg_ecg.py --epochs 30 --random-state 42
+Use:
+  python train_model_eeg_ecg.py
 """
 
 import argparse
