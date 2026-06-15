@@ -1,0 +1,22 @@
+
+========================================================================
+  COMPARISON SUMMARY  |  split=VAL (tuning/sanity)  |  n_seeds=5
+========================================================================
+  metric                                      EEG      EEG+ECG     delta
+  pooled AUC-ROC                      0.555±0.008  0.592±0.010    +0.036
+  mean per-subject AUC                0.510±0.013  0.567±0.014    +0.057
+  mean per-subject AUC (smoothed)     0.523±0.013  0.598±0.017    +0.075
+
+  delta = EEG+ECG - EEG  (positive => ECG helps)
+========================================================================
+
+========================================================================
+  COMPARISON SUMMARY  |  split=TEST (FINAL, one-time)  |  n_seeds=5
+========================================================================
+  metric                                      EEG      EEG+ECG     delta
+  pooled AUC-ROC                      0.580±0.005  0.572±0.007    -0.008
+  mean per-subject AUC                0.500±0.016  0.516±0.013    +0.016
+  mean per-subject AUC (smoothed)     0.522±0.024  0.540±0.022    +0.018
+
+  delta = EEG+ECG - EEG  (positive => ECG helps)
+========================================================================

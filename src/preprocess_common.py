@@ -45,6 +45,15 @@ DEFAULT_INTERICTAL_RATIO = 5.0  # interictal : pre-ictal windows kept
 DEFAULT_WINDOW_SEC = 2.0
 DEFAULT_STEP_SEC = 1.0
 
+# Window normalization scheme:
+#   "per_window"    — z-score each 2 s window independently (removes within-window
+#                     amplitude; the original default).
+#   "per_recording" — z-score with one mean/std per channel over the whole recording
+#                     (keeps amplitude/power dynamics across windows; only removes the
+#                     per-patient/per-electrode scale).
+NORMALIZE_CHOICES = ("per_window", "per_recording")
+DEFAULT_NORMALIZE = "per_window"
+
 
 @dataclass
 class Recording:
@@ -114,7 +123,8 @@ def apply_notch_filter(raw: mne.io.BaseRaw, notch_freq: float = SEIZEIT2_NOTCH_H
 
 
 def _classify_window(
-        ws: float, we: float, seizures: list[tuple[float, float]]
+        ws: float, we: float, seizures: list[tuple[float, float]],
+        preictal_sec: float = PREICTAL_SEC,
 ) -> str:
     """Classify a window [ws, we) as 'exclude', 'preictal', or 'interictal'."""
     # exclude takes priority: ictal + post-ictal guard
@@ -123,9 +133,9 @@ def _classify_window(
         post_end = onset + dur + POSTICTAL_GUARD_SEC
         if we > ictal_start and ws < post_end:
             return "exclude"
-    # pre-ictal: within [onset - PREICTAL_SEC, onset)
+    # pre-ictal: within [onset - preictal_sec, onset)
     for onset, _dur in seizures:
-        pre_start = onset - PREICTAL_SEC
+        pre_start = onset - preictal_sec
         if we > pre_start and ws < onset:
             return "preictal"
     return "interictal"
@@ -166,6 +176,8 @@ def build_recording_windows(
         step_sec: float,
         interictal_ratio: float,
         rng: np.random.Generator,
+        preictal_sec: float = PREICTAL_SEC,
+        normalize: str = DEFAULT_NORMALIZE,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], float]:
     """
     Build the kept windows for one recording: ALL pre-ictal + a subsampled set of
@@ -186,7 +198,7 @@ def build_recording_windows(
     preictal_starts: list[float] = []
     interictal_starts: list[float] = []
     for ws in starts:
-        label = _classify_window(ws, ws + window_sec, seizures)
+        label = _classify_window(ws, ws + window_sec, seizures, preictal_sec)
         if label == "preictal":
             preictal_starts.append(ws)
         elif label == "interictal":
@@ -207,6 +219,14 @@ def build_recording_windows(
             + [(ws, 0) for ws in interictal_starts])
     kept.sort(key=lambda t: t[0])               # chronological order
 
+    # per-recording stats: one mean/std per channel over the whole recording, used
+    # only for normalize == "per_recording". (Whole-recording stats include the
+    # later val/test windows — a negligible 2-scalar/channel effect, and the
+    # conventional way to normalize continuous EEG.)
+    if normalize == "per_recording":
+        rec_mu = data.mean(axis=1, keepdims=True).astype(np.float32)
+        rec_std = data.std(axis=1, keepdims=True).astype(np.float32) + 1e-8
+
     segs, labels, centers = [], [], []
     for ws, lab in kept:
         i0 = int(round(ws * sfreq))
@@ -214,9 +234,13 @@ def build_recording_windows(
         if i1 > n_samples:
             continue
         seg = data[:, i0:i1].astype(np.float32)
-        mu = seg.mean(axis=1, keepdims=True)
-        std = seg.std(axis=1, keepdims=True) + 1e-8
-        segs.append((seg - mu) / std)
+        if normalize == "per_recording":
+            seg = (seg - rec_mu) / rec_std
+        else:  # per_window (default)
+            mu = seg.mean(axis=1, keepdims=True)
+            std = seg.std(axis=1, keepdims=True) + 1e-8
+            seg = (seg - mu) / std
+        segs.append(seg)
         labels.append(lab)
         centers.append(ws + 0.5 * window_sec)
 
@@ -234,14 +258,25 @@ def build_dataset(
         base: Path = SEIZEIT2_BASE,
         subjects: list[str] | None = None,
         random_state: int = 42,
+        preictal_sec: float = PREICTAL_SEC,
+        normalize: str = DEFAULT_NORMALIZE,
+        require_ecg: bool = False,
 ) -> dict:
-    """Build the full windowed dataset across all (or selected) SeizeIT2 recordings."""
+    """Build the full windowed dataset across all (or selected) SeizeIT2 recordings.
+
+    Set `require_ecg=True` on the EEG-only pipeline to restrict it to exactly the
+    recordings that also have an ECG file, so the EEG-only and EEG+ECG datasets are
+    built on the *same* recordings — a fair paired comparison (the two feature sets
+    then differ only by the presence of the ECG channel, nothing else).
+    """
     rng = np.random.default_rng(random_state)
     recordings = discover_recordings(base)
     if subjects:
         wanted = set(subjects)
         recordings = [r for r in recordings if r.subject in wanted]
-    if include_ecg:
+    # include_ecg needs the ECG channel; require_ecg keeps the EEG-only set on the
+    # identical recordings so the comparison is paired. Both => filter to ECG-bearing.
+    if include_ecg or require_ecg:
         missing_ecg = [r.run for r in recordings if r.ecg_path is None]
         if missing_ecg:
             print(f"  [WARN] Skipping {len(missing_ecg)} recording(s) with no ECG file: "
@@ -258,7 +293,8 @@ def build_dataset(
 
     for rec in tqdm(recordings, desc="Recordings", unit="rec"):
         x, y, centers, ch, sf = build_recording_windows(
-            rec, include_ecg, window_sec, step_sec, interictal_ratio, rng
+            rec, include_ecg, window_sec, step_sec, interictal_ratio, rng,
+            preictal_sec=preictal_sec, normalize=normalize,
         )
         if len(x) == 0:
             continue
@@ -282,13 +318,15 @@ def build_dataset(
     centers = np.concatenate(all_centers, axis=0)
     print(f"\nDataset  total={len(x)}  pre-ictal={int(y.sum())}  "
           f"interictal={int((y == 0).sum())}  channels={x.shape[1]}  "
-          f"timepoints={x.shape[2]}")
+          f"timepoints={x.shape[2]}  preictal_sec={int(preictal_sec)}  normalize={normalize}")
 
     return {
         "x": x, "y": y, "centers": centers,
         "channel_names": channel_names, "sfreq": sfreq,
         "window_sec": window_sec, "step_sec": step_sec,
         "interictal_ratio": interictal_ratio,
+        "preictal_sec": preictal_sec,
+        "normalize": normalize,
         "recording_paths": rec_paths, "event_paths": event_paths,
         "file_slices": file_slices,
     }
@@ -308,7 +346,8 @@ def save_preprocessed(out_path: Path, result: dict) -> None:
         step_sec=np.array(result["step_sec"], dtype=np.float64),
         notch_freq=np.array(SEIZEIT2_NOTCH_HZ, dtype=np.float64),
         interictal_ratio=np.array(result["interictal_ratio"], dtype=np.float64),
-        preictal_sec=np.array(PREICTAL_SEC, dtype=np.float64),
+        preictal_sec=np.array(result.get("preictal_sec", PREICTAL_SEC), dtype=np.float64),
+        normalize=np.array(result.get("normalize", DEFAULT_NORMALIZE)),
         recording_paths=np.array(result["recording_paths"]),
         event_paths=np.array(result["event_paths"]),
         file_slices=np.array(result["file_slices"], dtype=np.int64).reshape(-1, 2),
@@ -332,6 +371,7 @@ def load_preprocessed(path: Path) -> dict:
         "notch_freq": float(npz["notch_freq"]),
         "interictal_ratio": float(npz["interictal_ratio"]),
         "preictal_sec": float(npz["preictal_sec"]),
+        "normalize": str(npz["normalize"]) if "normalize" in npz else DEFAULT_NORMALIZE,
         "recording_paths": [Path(p) for p in npz["recording_paths"]],
         "event_paths": [Path(p) for p in npz["event_paths"]],
         "file_slices": [tuple(int(v) for v in row) for row in npz["file_slices"]],
@@ -347,40 +387,68 @@ def _subject_from_path(path) -> str:
 
 def subject_aware_split(
         data: dict,
-        train_frac: float = 0.8,
+        train_frac: float = 0.6,
+        val_frac: float = 0.2,
         train_subjects: list[str] | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Subject-level split: every window of a subject goes *entirely* to train or
-    *entirely* to test — no subject appears in both sets.
+    Within-subject class-stratified chronological 3-way split (train/val/test).
 
-    If `train_subjects` is provided, those subjects go to train and the rest to
-    test.  Otherwise the subjects are sorted by ID and the first `train_frac`
-    fraction is used for training (e.g. sub-001..sub-016 for 20 subjects at 0.8).
+    For each subject, pre-ictal and interictal windows are split independently and
+    chronologically: the first `train_frac` of each class → train, the next
+    `val_frac` → validation, the remainder → test. Staying chronological within
+    each class avoids look-ahead / temporal leakage, and train < val < test in time
+    (train is oldest, test is newest). The validation set is what you tune
+    hyperparameters on (pre-ictal horizon, decision threshold); the test set is
+    touched once, at the very end.
 
-    This avoids the chronological-window-split pitfall where pre-ictal windows
-    (which precede seizure onset) end up in train while the post-seizure
-    interictal tail fills the test set, leaving several subjects with zero
-    pre-ictal test windows.
+    Contrast with a plain chronological window split: pre-ictal windows precede
+    seizure onset, so the post-seizure interictal tail fills the last 20% and
+    subjects whose seizures fall early end up with zero pre-ictal test windows.
 
-    Returns sorted (train_idx, test_idx) into the concatenated window array.
+    If `train_subjects` is provided (list of subject IDs), a subject-level split is
+    used instead: those subjects → train, all others → test, with NO validation set
+    (val is returned empty). Subject-level is a secondary cross-patient analysis.
+
+    Returns sorted (train_idx, val_idx, test_idx) into the concatenated window array.
     """
     n = len(data["X"])
+    y = data["y"]
+    empty = np.array([], dtype=int)
     subj_of = np.empty(n, dtype=object)
-    all_subjects: list[str] = []
+    order: list[str] = []
     for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
         subj = _subject_from_path(p)
         subj_of[s:e] = subj
-        if subj not in all_subjects:
-            all_subjects.append(subj)
+        if subj not in order:
+            order.append(subj)
 
-    if train_subjects is None:
-        sorted_subjects = sorted(all_subjects)
-        k = min(max(int(round(len(sorted_subjects) * train_frac)), 1),
-                len(sorted_subjects) - 1)
-        train_set = set(sorted_subjects[:k])
-    else:
+    # ── subject-level split (optional override): no validation set ─────────────
+    if train_subjects is not None:
         train_set = set(train_subjects)
+        train_mask = np.array([s in train_set for s in subj_of], dtype=bool)
+        return np.where(train_mask)[0], empty, np.where(~train_mask)[0]
 
-    train_mask = np.array([s in train_set for s in subj_of], dtype=bool)
-    return np.where(train_mask)[0], np.where(~train_mask)[0]
+    # ── within-subject class-stratified chronological 3-way split (default) ────
+    train_parts, val_parts, test_parts = [], [], []
+    for subj in order:
+        idx = np.nonzero(subj_of == subj)[0]   # already ascending = chronological
+        for cls in (1, 0):                       # 1 = pre-ictal, 0 = interictal
+            cls_idx = idx[y[idx] == cls]
+            n_cls = len(cls_idx)
+            if n_cls == 0:
+                continue
+            # chronological cut points; train gets >=1, val/test may be empty for
+            # very small per-subject classes (rare once the cohort is large).
+            k_tr = min(max(int(round(n_cls * train_frac)), 1), n_cls)
+            k_va = min(max(int(round(n_cls * (train_frac + val_frac))), k_tr), n_cls)
+            train_parts.append(cls_idx[:k_tr])
+            if k_va > k_tr:
+                val_parts.append(cls_idx[k_tr:k_va])
+            if n_cls > k_va:
+                test_parts.append(cls_idx[k_va:])
+
+    def _cat(parts):
+        return np.sort(np.concatenate(parts)) if parts else empty
+
+    return _cat(train_parts), _cat(val_parts), _cat(test_parts)

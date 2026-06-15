@@ -1,0 +1,39 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.5
+  eval split=VAL   model=models/seizure_prediction_eeg/seizure_cnn.pt   epochs=30   seed=42
+============================================================
+  Precision      : 0.196
+  Recall (sens.) : 0.590
+  Specificity    : 0.448
+  F1             : 0.294
+  Accuracy       : 0.474   (misleading under imbalance)
+  Balanced acc   : 0.519
+  Confusion [tn fp fn tp]: [22438 27695 4693 6743]
+
+  AUC-ROC        : 0.535   (0.50 = chance)
+  AUC-PR         : 0.230   (baseline 0.186 = positive rate)
+
+  Over/underfit  : train F1 0.447  vs  test F1 0.294  (gap +0.153)
+
+  Threshold sweep (P / R / F1):
+    thr 0.2:  P 0.193   R 0.973   F1 0.322
+    thr 0.3:  P 0.192   R 0.924   F1 0.318
+    thr 0.4:  P 0.191   R 0.814   F1 0.310
+    thr 0.5:  P 0.196   R 0.590   F1 0.294  <-- current
+    thr 0.6:  P 0.224   R 0.304   F1 0.258
+    thr 0.7:  P 0.278   R 0.154   F1 0.198
+    thr 0.8:  P 0.377   R 0.082   F1 0.134
+
+  Per-subject val (AUC = within-patient ranking quality):
+    sub-001:  AUC 0.611   P 0.273   R 0.285   F1 0.279   (n_preictal 1440 / 8640)
+    sub-002:  AUC 0.555   P 0.211   R 0.810   F1 0.335   (n_preictal 5044 / 25648)
+    sub-003:  AUC 0.414   P 0.155   R 0.644   F1 0.250   (n_preictal 360 / 2160)
+    sub-004:  AUC 0.141   P 0.036   R 0.131   F1 0.057   (n_preictal 1352 / 8110)
+    sub-005:  AUC 0.883   P 0.517   R 0.781   F1 0.622   (n_preictal 720 / 3406)
+    sub-006:  AUC 0.748   P 0.476   R 0.556   F1 0.513   (n_preictal 360 / 2160)
+    sub-007:  AUC 0.496   P 0.176   R 0.533   F1 0.265   (n_preictal 720 / 4320)
+    sub-008:  AUC 0.471   P 0.247   R 0.474   F1 0.325   (n_preictal 720 / 2805)
+    sub-009:  AUC 0.581   P 0.193   R 0.736   F1 0.305   (n_preictal 360 / 2160)
+    sub-010:  AUC 0.413   P 0.113   R 0.239   F1 0.153   (n_preictal 360 / 2160)
+    mean per-subject AUC (subjects with positives): 0.531 ± 0.191  (n=10)
+============================================================
