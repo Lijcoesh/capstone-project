@@ -1,9 +1,7 @@
-# Standard-library modules used by the code need no installation:
-#   argparse, re, dataclasses, pathlib, typing
 captum==0.9.0
 matplotlib==3.10.9
 mne==1.12.1
 numpy==2.4.6
 scikit-learn==1.9.0
-torch==2.12.0          # GPU: install the CUDA build, e.g. pip install torch==2.12.0 --index-url https://download.pytorch.org/whl/cu126
+torch==2.12.0          
 tqdm==4.68.2
