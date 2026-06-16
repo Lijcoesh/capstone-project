@@ -1,0 +1,20 @@
+==========================================================
+  RandomForest BASELINE   feature_set=eeg_ecg
+  split=TEST   n_test=106,340   pre-ictal=17,977
+==========================================================
+  AUC-ROC                : 0.568   (0.50 = chance)
+  AUC-PR                 : 0.205   (baseline 0.169)
+  mean per-subject AUC   : 0.554 +/- 0.230   (n=56)
+  Precision/Recall/F1    : 0.246 / 0.116 / 0.157
+  Confusion [tn fp fn tp]: [82004 6359 15898 2079]
+
+  Top band-power features (RF importance):
+    ECG SD_beta        0.084
+    ECG SD_delta       0.084
+    ECG SD_gamma       0.081
+    ECG SD_theta       0.079
+    ECG SD_alpha       0.079
+    CROSStop SD_gamma  0.073
+    BTEleft SD_gamma   0.066
+    BTEleft SD_beta    0.063
+==========================================================

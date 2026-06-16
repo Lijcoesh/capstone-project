@@ -1,0 +1,7 @@
+timestamp,feature_set,train_frac,epochs,random_state,n_runs,interictal_ratio,pred_threshold,pred_min_run,precision,recall,f1,auc_roc,auc_pr,train_f1,tn,fp,fn,tp,n_test,n_test_preictal,model_path
+2026-06-14T12:08:51,eeg_ecg,0.8,30,42,1,5.0,0.5,2,0.2934,0.3474,0.3181,0.5909,0.2556,0.7237,27993,7546,5886,3133,44558,9019,models/seizure_prediction_eeg_ecg/seizure_cnn.pt
+2026-06-14T12:27:48,eeg_ecg,0.8,30,42,1,5.0,0.5,2,0.324,0.269,0.294,0.4949,0.2878,0.6609,33434,10116,13171,4848,61569,18019,models/seizure_prediction_eeg_ecg/seizure_cnn.pt
+2026-06-14T12:31:32,eeg_ecg,0.8,30,42,1,5.0,0.5,2,0.324,0.269,0.294,0.4949,0.2878,0.6609,33434,10116,13171,4848,61569,18019,models/seizure_prediction_eeg_ecg/seizure_cnn.pt
+2026-06-14T14:42:42,eeg_ecg,0.8,30,42,1,5.0,0.5,2,0.324,0.269,0.294,0.4949,0.2878,0.6609,33434,10116,13171,4848,61569,18019,models/seizure_prediction_eeg_ecg/seizure_cnn.pt
+2026-06-14T19:38:45,eeg_ecg,0.8,30,42,1,5.0,0.5,2,0.317,0.2106,0.253,0.5321,0.2802,0.6839,67518,13073,22751,6068,109410,28819,models/seizure_prediction_eeg_ecg/seizure_cnn.pt
+2026-06-14T21:21:29,eeg_ecg,0.8,30,42,1,5.0,0.5,2,0.211,0.6472,0.3182,0.5868,0.1982,0.6287,18574,17426,2540,4660,43200,7200,models/seizure_prediction_eeg_ecg/seizure_cnn.pt
