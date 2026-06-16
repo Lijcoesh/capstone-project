@@ -149,6 +149,4 @@ explicit and gives an interpretable feature-importance ranking.
 Open `notebooks/results_analysis.ipynb` and run all cells. It reads each pipeline's
 `per_subject.csv` and `metrics.csv`, compares **per-subject AUC** between EEG and EEG+ECG
 (the comparison that answers the research question), and writes its figures + a
-`comparison_summary.txt` to a timestamped folder under `results/comparison/<timestamp>/`. A
-narrative record of all decisions and runs is in
-[`docs/experiment_log.md`](docs/experiment_log.md).
+`comparison_summary.txt` to a timestamped folder under `results/comparison/<timestamp>/`.
