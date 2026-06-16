@@ -51,6 +51,11 @@ def parse_args() -> argparse.Namespace:
                              "the whole recording (keeps cross-window amplitude dynamics).")
     parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC)
     parser.add_argument("--step-sec", type=float, default=DEFAULT_STEP_SEC)
+    parser.add_argument("--dataset", choices=["seizeit2", "chbmit"], default="seizeit2",
+                        help="Dataset to preprocess: 'seizeit2' (default, behind-the-ear "
+                             "wearable, 50 Hz notch) or 'chbmit' (PhysioNet scalp EEG, "
+                             "EEG-only, 60 Hz notch). For chbmit the output defaults to "
+                             "data/processed/chbmit_windows.npz.")
     parser.add_argument("--require-ecg", action="store_true",
                         help="Keep only recordings that also have an ECG file, so this "
                              "EEG-only set is built on the SAME recordings as the EEG+ECG "
@@ -74,8 +79,12 @@ def main() -> None:
         preictal_sec=args.preictal_min * 60.0,
         normalize=args.normalize,
         require_ecg=args.require_ecg,
+        dataset=args.dataset,
     )
-    save_preprocessed(args.out, result)
+    out = args.out
+    if args.dataset == "chbmit" and out == DEFAULT_PREPROCESSED_PATH:
+        out = out.with_name("chbmit_windows.npz")
+    save_preprocessed(out, result)
 
 
 if __name__ == "__main__":

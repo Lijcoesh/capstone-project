@@ -23,6 +23,7 @@ windows and subsample interictal at a fixed ratio (interictal : pre-ictal).
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +38,13 @@ SEIZEIT2_BASE = Path(__file__).resolve().parent / "../data/raw/seizeit2"
 # SeizeIT2 was recorded in European EMUs (Belgium, Germany, Sweden, Portugal):
 # mains frequency is 50 Hz (NOT 60 Hz like the US-recorded CHB-MIT).
 SEIZEIT2_NOTCH_HZ = 50.0
+
+# CHB-MIT (PhysioNet) — optional secondary dataset for an EEG-only generalisation
+# check on dense clinical scalp EEG. Recorded in the US, so mains is 60 Hz, and the
+# seizure annotations live in per-subject "<subject>-summary.txt" files (not BIDS
+# events.tsv). Layout is flat: chbXX/chbXX_YY.edf.
+CHBMIT_BASE = Path(__file__).resolve().parent / "../data/raw/physionet.org/files/chbmit/1.0.0"
+CHBMIT_NOTCH_HZ = 60.0
 
 PREICTAL_SEC = 10 * 60          # 10 min before onset = pre-ictal (positive)
 POSTICTAL_GUARD_SEC = 10 * 60   # exclude the seizure + 10 min after it
@@ -111,6 +119,68 @@ def parse_seizure_events(events_path: Path | None) -> list[tuple[float, float]]:
     return sorted(seizures)
 
 
+# ── CHB-MIT discovery + annotation parsing ────────────────────────────────────
+
+def discover_recordings_chbmit(base: Path = CHBMIT_BASE) -> list[Recording]:
+    """Find every CHB-MIT .edf on disk, paired with its per-subject summary file.
+
+    CHB-MIT has no ECG and no BIDS events.tsv: seizures are listed per file inside
+    "<subject>-summary.txt". We store that summary as the recording's events_path and
+    parse it with parse_seizure_events_chbmit (keyed by the .edf filename).
+    """
+    base = Path(base)
+    recordings: list[Recording] = []
+    for edf in sorted(base.glob("chb*/*.edf")):
+        subject = edf.parent.name                      # chbXX
+        summary = edf.parent / f"{subject}-summary.txt"
+        recordings.append(
+            Recording(
+                subject=subject,
+                run=edf.stem,
+                eeg_path=edf,
+                ecg_path=None,
+                events_path=summary if summary.exists() else None,
+            )
+        )
+    return recordings
+
+
+def parse_seizure_events_chbmit(
+        summary_path: Path | None, edf_name: str
+) -> list[tuple[float, float]]:
+    """Return seizure (onset, duration) for one .edf from a CHB-MIT summary file.
+
+    The summary lists blocks per file ("File Name: chbXX_YY.edf"), each followed by
+    "Seizure Start/End Time: N seconds" (or "Seizure 1 Start Time:" … when a file has
+    multiple seizures). Times are in seconds from the start of that recording.
+    """
+    if summary_path is None or not Path(summary_path).exists():
+        return []
+    seizures: list[tuple[float, float]] = []
+    in_block = False
+    start: float | None = None
+    with open(summary_path, encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if line.startswith("File Name:"):
+                in_block = (line.split(":", 1)[1].strip() == edf_name)
+                start = None
+                continue
+            if not in_block:
+                continue
+            m = re.match(r"Seizure(?:\s+\d+)?\s+Start Time:\s*(\d+)", line)
+            if m:
+                start = float(m.group(1))
+                continue
+            m = re.match(r"Seizure(?:\s+\d+)?\s+End Time:\s*(\d+)", line)
+            if m and start is not None:
+                end = float(m.group(1))
+                if end > start:
+                    seizures.append((start, end - start))
+                start = None
+    return sorted(seizures)
+
+
 # ── Preprocessing helpers ─────────────────────────────────────────────────────
 
 def apply_notch_filter(raw: mne.io.BaseRaw, notch_freq: float = SEIZEIT2_NOTCH_HZ) -> None:
@@ -143,20 +213,29 @@ def _classify_window(
 
 
 def _load_recording_data(
-        rec: Recording, include_ecg: bool
+        rec: Recording, include_ecg: bool,
+        notch_hz: float = SEIZEIT2_NOTCH_HZ,
+        select_channels: list[str] | None = None,
 ) -> tuple[np.ndarray, float, list[str]]:
     """Load (and notch-filter) the EEG (+ECG) signal as a (channels, samples) array."""
     eeg = mne.io.read_raw_edf(str(rec.eeg_path), preload=True, verbose="ERROR")
-    apply_notch_filter(eeg)
+    apply_notch_filter(eeg, notch_hz)
     sfreq = float(eeg.info["sfreq"])
-    data = eeg.get_data()                       # (2, N)
+    data = eeg.get_data()                       # (channels, N)
     channel_names = list(eeg.ch_names)
+
+    # Restrict to a fixed channel set (CHB-MIT files vary — some have 24 channels);
+    # selecting a canonical montage by name keeps every recording the same shape.
+    if select_channels is not None:
+        idx = [channel_names.index(c) for c in select_channels if c in channel_names]
+        data = data[idx]
+        channel_names = [channel_names[i] for i in idx]
 
     if include_ecg:
         if rec.ecg_path is None:
             raise FileNotFoundError(f"ECG missing for {rec.run}")
         ecg = mne.io.read_raw_edf(str(rec.ecg_path), preload=True, verbose="ERROR")
-        apply_notch_filter(ecg)
+        apply_notch_filter(ecg, notch_hz)
         if ecg.n_times != eeg.n_times:
             # align to the shorter length (defensive; they normally match exactly)
             n = min(ecg.n_times, eeg.n_times)
@@ -179,18 +258,25 @@ def build_recording_windows(
         rng: np.random.Generator,
         preictal_sec: float = PREICTAL_SEC,
         normalize: str = DEFAULT_NORMALIZE,
+        dataset: str = "seizeit2",
+        notch_hz: float = SEIZEIT2_NOTCH_HZ,
+        select_channels: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], float]:
     """
     Build the kept windows for one recording: ALL pre-ictal + a subsampled set of
     interictal (ratio : 1). Returns (X, y, centers, channel_names, sfreq).
     Recordings with no seizures contribute nothing (no pre-ictal → returns empty).
     """
-    seizures = parse_seizure_events(rec.events_path)
+    if dataset == "chbmit":
+        seizures = parse_seizure_events_chbmit(rec.events_path, rec.eeg_path.name)
+    else:
+        seizures = parse_seizure_events(rec.events_path)
     if not seizures:
         return (np.empty((0, 0, 0), np.float32), np.empty(0, np.int64),
                 np.empty(0, np.float64), [], 0.0)
 
-    data, sfreq, channel_names = _load_recording_data(rec, include_ecg)
+    data, sfreq, channel_names = _load_recording_data(
+        rec, include_ecg, notch_hz=notch_hz, select_channels=select_channels)
     n_samples = data.shape[1]
     total_dur = n_samples / sfreq
     win_n = int(round(window_sec * sfreq))
@@ -262,6 +348,7 @@ def build_dataset(
         preictal_sec: float = PREICTAL_SEC,
         normalize: str = DEFAULT_NORMALIZE,
         require_ecg: bool = False,
+        dataset: str = "seizeit2",
 ) -> dict:
     """Build the full windowed dataset across all (or selected) SeizeIT2 recordings.
 
@@ -271,7 +358,14 @@ def build_dataset(
     then differ only by the presence of the ECG channel, nothing else).
     """
     rng = np.random.default_rng(random_state)
-    recordings = discover_recordings(base)
+    if dataset == "chbmit":
+        if base is SEIZEIT2_BASE:           # default not overridden -> use CHB-MIT root
+            base = CHBMIT_BASE
+        recordings = discover_recordings_chbmit(base)
+        notch_hz = CHBMIT_NOTCH_HZ
+    else:
+        recordings = discover_recordings(base)
+        notch_hz = SEIZEIT2_NOTCH_HZ
     if subjects:
         wanted = set(subjects)
         recordings = [r for r in recordings if r.subject in wanted]
@@ -286,6 +380,15 @@ def build_dataset(
     if not recordings:
         raise ValueError(f"No recordings found under {base}")
 
+    # CHB-MIT files differ in channel count (23 vs 24); lock to the first recording's
+    # montage by name so every window has an identical channel set / shape.
+    select_channels = None
+    if dataset == "chbmit":
+        _r0 = mne.io.read_raw_edf(str(recordings[0].eeg_path), preload=False, verbose="ERROR")
+        select_channels = list(_r0.ch_names)
+        print(f"  [CHB-MIT] Locking to {len(select_channels)} channels from "
+              f"{recordings[0].eeg_path.name}")
+
     all_x, all_y, all_centers = [], [], []
     rec_paths, event_paths, file_slices = [], [], []
     channel_names: list[str] = []
@@ -296,8 +399,15 @@ def build_dataset(
         x, y, centers, ch, sf = build_recording_windows(
             rec, include_ecg, window_sec, step_sec, interictal_ratio, rng,
             preictal_sec=preictal_sec, normalize=normalize,
+            dataset=dataset, notch_hz=notch_hz, select_channels=select_channels,
         )
         if len(x) == 0:
+            continue
+        # CHB-MIT: subjects vary in montage. Skip any recording that does not carry
+        # the full canonical channel set, so every kept window has the same shape.
+        if select_channels is not None and x.shape[1] != len(select_channels):
+            print(f"  [WARN] Skipping {rec.run}: {x.shape[1]} of {len(select_channels)} "
+                  f"canonical channels present (montage mismatch).")
             continue
         if not channel_names:
             channel_names, sfreq = ch, sf
@@ -328,6 +438,7 @@ def build_dataset(
         "interictal_ratio": interictal_ratio,
         "preictal_sec": preictal_sec,
         "normalize": normalize,
+        "notch_freq": notch_hz,
         "recording_paths": rec_paths, "event_paths": event_paths,
         "file_slices": file_slices,
     }
@@ -345,7 +456,7 @@ def save_preprocessed(out_path: Path, result: dict) -> None:
         sfreq=np.array(result["sfreq"], dtype=np.float64),
         window_sec=np.array(result["window_sec"], dtype=np.float64),
         step_sec=np.array(result["step_sec"], dtype=np.float64),
-        notch_freq=np.array(SEIZEIT2_NOTCH_HZ, dtype=np.float64),
+        notch_freq=np.array(result.get("notch_freq", SEIZEIT2_NOTCH_HZ), dtype=np.float64),
         interictal_ratio=np.array(result["interictal_ratio"], dtype=np.float64),
         preictal_sec=np.array(result.get("preictal_sec", PREICTAL_SEC), dtype=np.float64),
         normalize=np.array(result.get("normalize", DEFAULT_NORMALIZE)),

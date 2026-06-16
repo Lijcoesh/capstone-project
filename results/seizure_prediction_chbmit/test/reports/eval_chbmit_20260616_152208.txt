@@ -1,0 +1,40 @@
+============================================================
+  EVALUATION REPORT   feature_set=chbmit   threshold=0.5
+  eval split=TEST   model=models/seizure_prediction_eeg/cnn_chbmit.pt   epochs=60   seed=42
+============================================================
+  Precision      : 0.291
+  Recall (sens.) : 0.422
+  Specificity    : 0.753
+  F1             : 0.344
+  Accuracy       : 0.689   (misleading under imbalance)
+  Balanced acc   : 0.587
+  Confusion [tn fp fn tp]: [5378 1765 993 724]
+
+  AUC-ROC        : 0.641   (0.50 = chance)
+  AUC-PR         : 0.266   (baseline 0.194 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.641            0.653  (n=4)
+     30s (30 win)      0.677            0.728  (n=4)
+     60s (60 win)      0.683            0.735  (n=4)
+    120s (120 win)     0.686            0.722  (n=4)
+
+  Over/underfit  : train F1 0.556  vs  test F1 0.344  (gap +0.212)
+
+  Threshold sweep (P / R / F1):
+    thr 0.2:  P 0.253   R 0.754   F1 0.379
+    thr 0.3:  P 0.261   R 0.595   F1 0.363
+    thr 0.4:  P 0.272   R 0.498   F1 0.352
+    thr 0.5:  P 0.291   R 0.422   F1 0.344  <-- current
+    thr 0.6:  P 0.307   R 0.345   F1 0.325
+    thr 0.7:  P 0.344   R 0.268   F1 0.301
+    thr 0.8:  P 0.323   R 0.111   F1 0.165
+
+  Per-subject test (AUC = within-patient ranking quality):
+    chb01:  AUC 0.694   P 0.291   R 0.954   F1 0.446   (n_preictal 589 / 2789)
+    chb02:  AUC 0.487   P 0.204   R 0.302   F1 0.243   (n_preictal 199 / 992)
+    chb03:  AUC 0.701   P 0.314   R 0.084   F1 0.133   (n_preictal 569 / 2919)
+    chb04:  AUC 0.729   P 0.500   R 0.150   F1 0.231   (n_preictal 360 / 2160)
+    mean per-subject AUC (subjects with positives): 0.653 ± 0.096  (n=4)
+============================================================

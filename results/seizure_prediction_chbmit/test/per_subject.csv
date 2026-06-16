@@ -1,0 +1,5 @@
+feature_set,subject,auc,precision,recall,f1,n_preictal,n_test
+chbmit,chb01,0.7451,0.2987,0.961,0.4557,589,2789
+chbmit,chb02,0.423,0.1815,0.2462,0.209,199,992
+chbmit,chb03,0.7148,0.3187,0.051,0.0879,569,2919
+chbmit,chb04,0.8377,0.6167,0.1028,0.1762,360,2160
