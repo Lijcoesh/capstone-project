@@ -52,7 +52,12 @@ def load_models(path: Path, device: torch.device) -> tuple[list[SeizureCNN], dic
     meta = checkpoint["meta"]
     models: list[SeizureCNN] = []
     for sd in checkpoint["state_dicts"]:
-        m = SeizureCNN(meta["n_channels"], meta["n_timepoints"]).to(device)
+        m = SeizureCNN(
+            meta["n_channels"],
+            meta["n_timepoints"],
+            float(meta.get("dropout", 0.25)),
+            float(meta.get("dropout_fc", 0.5)),
+        ).to(device)
         m.load_state_dict(sd)
         m.eval()
         models.append(m)

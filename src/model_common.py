@@ -24,32 +24,38 @@ from preprocess_common import load_preprocessed, subject_aware_split
 # ── 1-D CNN model ─────────────────────────────────────────────────────────────
 
 class SeizureCNN(nn.Module):
-    def __init__(self, n_channels: int, n_timepoints: int) -> None:
+    def __init__(
+            self,
+            n_channels: int,
+            n_timepoints: int,
+            dropout_conv: float = 0.25,
+            dropout_fc: float = 0.5,
+    ) -> None:
         super().__init__()
         self.conv_block = nn.Sequential(
             nn.Conv1d(n_channels, 32, kernel_size=15, padding=7),
             nn.BatchNorm1d(32),
             nn.ELU(),
             nn.MaxPool1d(4),
-            nn.Dropout(0.25),
+            nn.Dropout(dropout_conv),
 
             nn.Conv1d(32, 64, kernel_size=9, padding=4),
             nn.BatchNorm1d(64),
             nn.ELU(),
             nn.MaxPool1d(4),
-            nn.Dropout(0.25),
+            nn.Dropout(dropout_conv),
 
             nn.Conv1d(64, 128, kernel_size=5, padding=2),
             nn.BatchNorm1d(128),
             nn.ELU(),
             nn.AdaptiveAvgPool1d(8),
-            nn.Dropout(0.25),
+            nn.Dropout(dropout_conv),
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
             nn.Linear(128 * 8, 128),
             nn.ELU(),
-            nn.Dropout(0.5),
+            nn.Dropout(dropout_fc),
             nn.Linear(128, 2),
         )
 
@@ -101,12 +107,14 @@ def train_model(
         y_val: np.ndarray | None = None,
         patience: int = 5,
         use_amp: bool = True,
+        dropout_conv: float = 0.25,
+        dropout_fc: float = 0.5,
 ) -> SeizureCNN:
     torch.manual_seed(random_state)
     np.random.seed(random_state)
 
     n_channels, n_timepoints = x_train.shape[1], x_train.shape[2]
-    model = SeizureCNN(n_channels, n_timepoints).to(device)
+    model = SeizureCNN(n_channels, n_timepoints, dropout_conv, dropout_fc).to(device)
 
     # Class imbalance: weight the positive (pre-ictal) class by how much rarer it is.
     n_neg = int((y_train == 0).sum())
@@ -204,6 +212,10 @@ def add_training_args(parser: argparse.ArgumentParser, default_data: Path, defau
                         help="Early-stop after this many epochs without val-AUC improvement "
                              "(default 5). Ignored when there is no validation set.")
     parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.25,
+                        help="Dropout in convolutional blocks (default 0.25).")
+    parser.add_argument("--dropout-fc", type=float, default=0.5,
+                        help="Dropout in the fully-connected classifier (default 0.5).")
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--no-amp", action="store_true",
                         help="Disable CUDA mixed-precision (AMP). AMP is ~2x faster and on "
@@ -264,6 +276,7 @@ def run_training(args: argparse.Namespace) -> None:
             lr=args.lr, random_state=run_seed,
             x_val=x_val, y_val=y_val,
             patience=args.patience, use_amp=not args.no_amp,
+            dropout_conv=args.dropout, dropout_fc=args.dropout_fc,
         ))
 
     meta = {
@@ -285,6 +298,8 @@ def run_training(args: argparse.Namespace) -> None:
         "random_state": args.random_state,
         "lr": args.lr,
         "batch_size": args.batch_size,
+        "dropout": args.dropout,
+        "dropout_fc": args.dropout_fc,
         "data_path": str(args.data),
     }
     save_models(models, args.save_model, meta)

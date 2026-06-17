@@ -53,6 +53,10 @@ def parse_args() -> argparse.Namespace:
                              "the whole recording (keeps cross-window amplitude dynamics).")
     parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC)
     parser.add_argument("--step-sec", type=float, default=DEFAULT_STEP_SEC)
+    parser.add_argument("--notch-hz", type=float, default=50.0,
+                        help="Power-line notch frequency in Hz (default 50). Use 0 to disable.")
+    parser.add_argument("--target-sfreq", type=float, default=0.0,
+                        help="Resample recordings to this Hz before windowing (default 0 = native).")
     parser.add_argument("--subjects", type=str, nargs="+", default=None,
                         help="Limit to specific subjects, e.g. sub-001 sub-002 (default: all).")
     parser.add_argument("--random-state", type=int, default=42)
@@ -71,6 +75,8 @@ def main() -> None:
         random_state=args.random_state,
         preictal_sec=args.preictal_min * 60.0,
         normalize=args.normalize,
+        notch_freq=args.notch_hz,
+        target_sfreq=args.target_sfreq if args.target_sfreq > 0 else None,
     )
     save_preprocessed(args.out, result)
 

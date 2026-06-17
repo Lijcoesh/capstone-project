@@ -113,6 +113,15 @@ def parse_seizure_events(events_path: Path | None) -> list[tuple[float, float]]:
 
 # ── Preprocessing helpers ─────────────────────────────────────────────────────
 
+def _resample_raw(raw: mne.io.BaseRaw, target_sfreq: float | None) -> float:
+    """Resample *raw* to *target_sfreq* when set and different from native sfreq."""
+    sfreq = float(raw.info["sfreq"])
+    if target_sfreq is None or target_sfreq <= 0 or abs(sfreq - target_sfreq) < 1e-6:
+        return sfreq
+    raw.resample(target_sfreq, verbose="ERROR")
+    return float(raw.info["sfreq"])
+
+
 def apply_notch_filter(raw: mne.io.BaseRaw, notch_freq: float = SEIZEIT2_NOTCH_HZ) -> None:
     """Remove power-line noise at *notch_freq* and harmonics below Nyquist, in place."""
     if notch_freq <= 0:
@@ -143,12 +152,15 @@ def _classify_window(
 
 
 def _load_recording_data(
-        rec: Recording, include_ecg: bool
+        rec: Recording,
+        include_ecg: bool,
+        notch_freq: float = SEIZEIT2_NOTCH_HZ,
+        target_sfreq: float | None = None,
 ) -> tuple[np.ndarray, float, list[str]]:
     """Load (and notch-filter) the EEG (+ECG) signal as a (channels, samples) array."""
     eeg = mne.io.read_raw_edf(str(rec.eeg_path), preload=True, verbose="ERROR")
-    apply_notch_filter(eeg)
-    sfreq = float(eeg.info["sfreq"])
+    apply_notch_filter(eeg, notch_freq=notch_freq)
+    sfreq = _resample_raw(eeg, target_sfreq)
     data = eeg.get_data()                       # (2, N)
     channel_names = list(eeg.ch_names)
 
@@ -156,7 +168,8 @@ def _load_recording_data(
         if rec.ecg_path is None:
             raise FileNotFoundError(f"ECG missing for {rec.run}")
         ecg = mne.io.read_raw_edf(str(rec.ecg_path), preload=True, verbose="ERROR")
-        apply_notch_filter(ecg)
+        apply_notch_filter(ecg, notch_freq=notch_freq)
+        _resample_raw(ecg, sfreq)
         if ecg.n_times != eeg.n_times:
             # align to the shorter length (defensive; they normally match exactly)
             n = min(ecg.n_times, eeg.n_times)
@@ -179,6 +192,8 @@ def build_recording_windows(
         rng: np.random.Generator,
         preictal_sec: float = PREICTAL_SEC,
         normalize: str = DEFAULT_NORMALIZE,
+        notch_freq: float = SEIZEIT2_NOTCH_HZ,
+        target_sfreq: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], float]:
     """
     Build the kept windows for one recording: ALL pre-ictal + a subsampled set of
@@ -190,7 +205,9 @@ def build_recording_windows(
         return (np.empty((0, 0, 0), np.float32), np.empty(0, np.int64),
                 np.empty(0, np.float64), [], 0.0)
 
-    data, sfreq, channel_names = _load_recording_data(rec, include_ecg)
+    data, sfreq, channel_names = _load_recording_data(
+        rec, include_ecg, notch_freq=notch_freq, target_sfreq=target_sfreq,
+    )
     n_samples = data.shape[1]
     total_dur = n_samples / sfreq
     win_n = int(round(window_sec * sfreq))
@@ -262,6 +279,8 @@ def build_dataset(
         preictal_sec: float = PREICTAL_SEC,
         normalize: str = DEFAULT_NORMALIZE,
         require_ecg: bool = False,
+        notch_freq: float = SEIZEIT2_NOTCH_HZ,
+        target_sfreq: float | None = None,
 ) -> dict:
     """Build the full windowed dataset across all (or selected) SeizeIT2 recordings.
 
@@ -296,6 +315,7 @@ def build_dataset(
         x, y, centers, ch, sf = build_recording_windows(
             rec, include_ecg, window_sec, step_sec, interictal_ratio, rng,
             preictal_sec=preictal_sec, normalize=normalize,
+            notch_freq=notch_freq, target_sfreq=target_sfreq,
         )
         if len(x) == 0:
             continue
@@ -328,6 +348,8 @@ def build_dataset(
         "interictal_ratio": interictal_ratio,
         "preictal_sec": preictal_sec,
         "normalize": normalize,
+        "notch_freq": notch_freq,
+        "target_sfreq": target_sfreq if target_sfreq and target_sfreq > 0 else sfreq,
         "recording_paths": rec_paths, "event_paths": event_paths,
         "file_slices": file_slices,
     }
@@ -345,7 +367,8 @@ def save_preprocessed(out_path: Path, result: dict) -> None:
         sfreq=np.array(result["sfreq"], dtype=np.float64),
         window_sec=np.array(result["window_sec"], dtype=np.float64),
         step_sec=np.array(result["step_sec"], dtype=np.float64),
-        notch_freq=np.array(SEIZEIT2_NOTCH_HZ, dtype=np.float64),
+        notch_freq=np.array(result.get("notch_freq", SEIZEIT2_NOTCH_HZ), dtype=np.float64),
+        target_sfreq=np.array(result.get("target_sfreq", result["sfreq"]), dtype=np.float64),
         interictal_ratio=np.array(result["interictal_ratio"], dtype=np.float64),
         preictal_sec=np.array(result.get("preictal_sec", PREICTAL_SEC), dtype=np.float64),
         normalize=np.array(result.get("normalize", DEFAULT_NORMALIZE)),
@@ -370,6 +393,7 @@ def load_preprocessed(path: Path) -> dict:
         "window_sec": float(npz["window_sec"]),
         "step_sec": float(npz["step_sec"]),
         "notch_freq": float(npz["notch_freq"]),
+        "target_sfreq": float(npz["target_sfreq"]) if "target_sfreq" in npz else float(npz["sfreq"]),
         "interictal_ratio": float(npz["interictal_ratio"]),
         "preictal_sec": float(npz["preictal_sec"]),
         "normalize": str(npz["normalize"]) if "normalize" in npz else DEFAULT_NORMALIZE,

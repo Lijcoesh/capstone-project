@@ -27,6 +27,7 @@ capstone-project/                # repo root
 ├── models/          # saved model checkpoints, per pipeline
 ├── results/         # metrics.csv, per_subject.csv, reports/, plots, per pipeline
 ├── notebooks/       # results_analysis.ipynb — EEG vs EEG+ECG comparison figure
+├── scripts/         # download_seizeit2.py, tune_eeg.py (automated hyperparameter search)
 ├── docs/            # experiment_log.md — full record of decisions and runs
 ├── requirements.txt
 └── README.md
@@ -132,6 +133,63 @@ python src/baseline_rf.py --data data/processed/eeg_ecg_windows.npz --feature-se
 Every script accepts `--help` for its options. For a robust comparison, repeat
 train+evaluate across several `--random-state` seeds and report the mean ± std (single runs
 are noisy on these small per-subject test sets).
+
+### Automated hyperparameter tuning (`scripts/tune_eeg.py`)
+
+To avoid manually rerunning the EEG pipeline while changing one variable at a time, use the
+tuning script. It runs **preprocess → train → evaluate** in a loop, varying one
+hyperparameter at a time (coordinate descent), keeping improvements, and stopping when
+validation **AUC-ROC** reaches the target or no further gain is found.
+
+```bash
+# Full search (30 epochs per trial — recommended)
+python scripts/tune_eeg.py
+
+# Faster screening only (12 epochs; re-confirm top configs with full training)
+python scripts/tune_eeg.py --quick
+
+# Resume after an interruption
+python scripts/tune_eeg.py --resume
+
+# Sweep a single variable (e.g. dropout, skipping preprocess)
+python scripts/tune_eeg.py --param dropout --values 0.1 0.25 0.4 --skip-preprocess
+```
+
+**Parameters searched:** window size (`--window-sec`), step size (`--step-sec`), sampling
+rate (`--target-sfreq`), notch filter (`--notch-hz`), interictal ratio
+(`--interictal-ratio`), batch size (`--batch-size`), dropout (`--dropout`).
+
+**How many trials?** Each trial is one full preprocess + train + evaluate cycle. The script
+tries up to **~171 trials** in the worst case: 1 baseline run + up to **5 rounds**
+(`--max-rounds`, default 5) × **34 candidate values** across the seven parameters (7 + 6 + 3
++ 3 + 6 + 4 + 5). It usually runs fewer — already-tried configs are skipped, and the search
+stops early if validation AUC-ROC ≥ **0.7** (default `--target`) or a round finds no
+improvement. Preprocessing is skipped automatically when only training params change (batch
+size, dropout).
+
+**Epochs per trial:** **30** by default (same as `train_model_eeg.py`), with early stopping
+after **5** epochs without validation-AUC gain. `--quick` uses **12** epochs and patience
+**3** for faster but less reliable screening.
+
+**How long?** Roughly **20–40 minutes per trial** on a mid-range GPU (e.g. GTX 1070): ~3–5
+min preprocess, ~15–30 min train, ~1–2 min evaluate. A full search can therefore take from a
+few hours (if it stops early) up to **several days** in the worst case. The PC must stay
+awake and the terminal open; use `--resume` if interrupted.
+
+**Results** are written under `results/tuning/eeg/`:
+
+| File | Contents |
+|------|----------|
+| `trials.csv` | Every trial: AUC-ROC, F1, and all parameter values |
+| `best_config.json` | Best settings so far + exact commands to rerun on the main pipeline |
+| `state.json` | Checkpoint for `--resume` |
+
+The metric used for selection is **validation AUC-ROC** (`--eval-split val`, default in
+`evaluate_eeg.py`). Chance level is **0.5** (`--baseline`). When tuning finishes, run the
+commands in `best_config.json` on the main paths (`data/processed/eeg_windows.npz`,
+`models/seizure_prediction_eeg/`, `results/seizure_prediction_eeg/`) for the final model.
+The same preprocessing flags are available on `preprocess_eeg_ecg.py` so the winning EEG
+settings can be reused for the EEG+ECG pipeline.
 
 ## Baseline
 
