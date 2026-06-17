@@ -51,6 +51,10 @@ def parse_args() -> argparse.Namespace:
                              "the whole recording (keeps cross-window amplitude dynamics).")
     parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC)
     parser.add_argument("--step-sec", type=float, default=DEFAULT_STEP_SEC)
+    parser.add_argument("--notch-hz", type=float, default=50.0,
+                        help="Power-line notch frequency in Hz (default 50). Use 0 to disable.")
+    parser.add_argument("--target-sfreq", type=float, default=0.0,
+                        help="Resample recordings to this Hz before windowing (default 0 = native).")
     parser.add_argument("--require-ecg", action="store_true",
                         help="Keep only recordings that also have an ECG file, so this "
                              "EEG-only set is built on the SAME recordings as the EEG+ECG "
@@ -74,6 +78,8 @@ def main() -> None:
         preictal_sec=args.preictal_min * 60.0,
         normalize=args.normalize,
         require_ecg=args.require_ecg,
+        notch_freq=args.notch_hz,
+        target_sfreq=args.target_sfreq if args.target_sfreq > 0 else None,
     )
     save_preprocessed(args.out, result)
 
