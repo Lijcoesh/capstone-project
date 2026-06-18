@@ -155,15 +155,15 @@ python scripts/tune_eeg.py --resume
 python scripts/tune_eeg.py --param dropout --values 0.1 0.25 0.4 --skip-preprocess
 ```
 
-**Parameters searched:** window size (`--window-sec`), step size (`--step-sec`), sampling
-rate (`--target-sfreq`), notch filter (`--notch-hz`), interictal ratio
-(`--interictal-ratio`), batch size (`--batch-size`), dropout (`--dropout`).
+**Parameters searched:** step size (`--step-sec`), sampling rate (`--target-sfreq`),
+interictal ratio (`--interictal-ratio`), batch size (`--batch-size`), dropout (`--dropout`).
+**Fixed:** window size **2.0 s**, notch filter **50 Hz** (European mains; not tuned).
 
 **How many trials?** Each trial is one full preprocess + train + evaluate cycle. The script
-tries up to **~171 trials** in the worst case: 1 baseline run + up to **5 rounds**
-(`--max-rounds`, default 5) × **34 candidate values** across the seven parameters (7 + 6 + 3
-+ 3 + 6 + 4 + 5). It usually runs fewer — already-tried configs are skipped, and the search
-stops early if validation AUC-ROC ≥ **0.7** (default `--target`) or a round finds no
+tries up to **~121 trials** in the worst case: 1 baseline run + up to **5 rounds**
+(`--max-rounds`, default 5) × **24 candidate values** across the five tunable parameters
+(6 + 3 + 6 + 4 + 5). It usually runs fewer — already-tried configs are skipped, and the
+search stops early if validation AUC-ROC ≥ **0.7** (default `--target`) or a round finds no
 improvement. Preprocessing is skipped automatically when only training params change (batch
 size, dropout).
 
