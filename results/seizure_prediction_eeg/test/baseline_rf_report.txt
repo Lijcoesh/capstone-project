@@ -2,35 +2,35 @@
   RandomForest BASELINE   feature_set=eeg
   split=TEST   n_eval=42,154   pre-ictal=7,129
 ==========================================================
-  AUC-ROC                : 0.542   (0.50 = chance)
-  AUC-PR                 : 0.191   (baseline 0.169)
-  mean per-subject AUC   : 0.548 +/- 0.253   (n=56)
-  mean per-subj AUC (sm) : 0.565   (best smoothing 120s)
-  Precision/Recall/F1    : 0.186 / 0.808 / 0.302   (@ thr 0.09, val-tuned (best F1 on VAL))
-  Confusion [tn fp fn tp]: [9792 25233 1370 5759]
-  @ thr 0.50 (CNN default): P 0.194 / R 0.098 / F1 0.130  [32118 2907 6429 700]
+  AUC-ROC                : 0.536   (0.50 = chance)
+  AUC-PR                 : 0.190   (baseline 0.169)
+  mean per-subject AUC   : 0.553 +/- 0.252   (n=56)
+  mean per-subj AUC (sm) : 0.582   (best smoothing 120s)
+  Precision/Recall/F1    : 0.188 / 0.731 / 0.300   (@ thr 0.11, val-tuned (best F1 on VAL))
+  Confusion [tn fp fn tp]: [12582 22443 1917 5212]
+  @ thr 0.50 (CNN default): P 0.194 / R 0.100 / F1 0.132  [32065 2960 6416 713]
 
-  Prob pre-ictal  mean/median: 0.228 / 0.163
-  Prob interictal mean/median: 0.206 / 0.150
+  Prob pre-ictal  mean/median: 0.225 / 0.157
+  Prob interictal mean/median: 0.205 / 0.147
 
   Threshold sweep (P / R / F1):
-    thr 0.10:  P 0.187   R 0.785   F1 0.302
-    thr 0.15:  P 0.196   R 0.603   F1 0.296
-    thr 0.20:  P 0.169   R 0.339   F1 0.225
-    thr 0.30:  P 0.170   R 0.186   F1 0.178
-    thr 0.40:  P 0.180   R 0.129   F1 0.150
-    thr 0.50:  P 0.194   R 0.098   F1 0.130
-    thr 0.60:  P 0.214   R 0.086   F1 0.123
+    thr 0.10:  P 0.187   R 0.783   F1 0.302
+    thr 0.15:  P 0.185   R 0.546   F1 0.276
+    thr 0.20:  P 0.168   R 0.340   F1 0.225
+    thr 0.30:  P 0.167   R 0.182   F1 0.174
+    thr 0.40:  P 0.174   R 0.122   F1 0.143
+    thr 0.50:  P 0.194   R 0.100   F1 0.132
+    thr 0.60:  P 0.214   R 0.087   F1 0.124
 
-  Threshold tuning: best F1 on VAL = 0.323 at thr 0.09
+  Threshold tuning: best F1 on VAL = 0.323 at thr 0.11
 
   Top band-power features (RF importance):
-    CROSStop SD_gamma  0.108
+    CROSStop SD_gamma  0.107
     BTEleft SD_beta    0.106
-    BTEleft SD_gamma   0.104
+    BTEleft SD_gamma   0.105
     BTEleft SD_delta   0.102
     CROSStop SD_beta   0.102
-    CROSStop SD_alpha  0.098
+    CROSStop SD_alpha  0.099
     CROSStop SD_delta  0.096
     CROSStop SD_theta  0.095
 ==========================================================
