@@ -6,15 +6,14 @@ Runs preprocess -> train -> evaluate in a loop, varying one parameter at a
 time (coordinate descent). Stops when validation AUC-ROC reaches --target or
 after --max-rounds with no improvement.
 
-The seven parameters from todo.txt are searched:
-  window size, step size, sampling rate, notch filter, batch size, dropout,
-  interictal ratio.
+The five tunable parameters are searched. Fixed: window size 2.0 s, notch filter 50 Hz:
+  step size, sampling rate, batch size, dropout, interictal ratio.
 
 Usage (from repo root):
   python scripts/tune_eeg.py
   python scripts/tune_eeg.py --quick
   python scripts/tune_eeg.py --resume
-  python scripts/tune_eeg.py --param window_sec --values 1.5 2.0 3.0
+  python scripts/tune_eeg.py --param step_sec --values 0.5 1.0 1.5
 """
 
 from __future__ import annotations
@@ -45,32 +44,32 @@ DEFAULT_DATA = REPO_ROOT / "data" / "processed" / "eeg_windows.npz"
 DEFAULT_MODEL = TUNING_DIR / "current_model.pt"
 
 # Search order: preprocessing params first, then training params.
-PARAM_ORDER = (
-    "window_sec",
+# window_sec and notch_hz are fixed (SeizeIT2 European mains = 50 Hz; 2 s windows).
+FIXED_PARAMS: dict[str, float | int] = {"window_sec": 2.0, "notch_hz": 50.0}
+
+TUNE_PARAM_ORDER = (
     "step_sec",
     "target_sfreq",
-    "notch_hz",
     "interictal_ratio",
     "batch_size",
     "dropout",
 )
 
+CONFIG_KEYS = tuple(FIXED_PARAMS) + TUNE_PARAM_ORDER
+
 DEFAULT_CONFIG: dict[str, float | int] = {
-    "window_sec": 2.0,
+    **FIXED_PARAMS,
     "step_sec": 1.0,
     "target_sfreq": 0.0,      # 0 = native (256 Hz)
-    "notch_hz": 50.0,
     "interictal_ratio": 5.0,
     "batch_size": 128,
     "dropout": 0.25,
 }
 
-# Full grids used for coordinate descent (sorted by distance to current value).
+# Candidate values per tunable parameter (fixed params are not listed here).
 CANDIDATE_GRIDS: dict[str, list[float | int]] = {
-    "window_sec": [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0],
     "step_sec": [0.25, 0.5, 0.75, 1.0, 1.5, 2.0],
     "target_sfreq": [0, 128, 256],          # 0 = keep native sampling rate
-    "notch_hz": [0, 50, 60],                # 0 = disable notch
     "interictal_ratio": [2, 3, 5, 7, 10, 15],
     "batch_size": [32, 64, 128, 256],
     "dropout": [0.0, 0.1, 0.25, 0.4, 0.5],
@@ -198,7 +197,7 @@ def _append_trial_csv(result: TrialResult) -> None:
         "mean_subj_auc": result.mean_subj_auc,
         "duration_sec": round(result.duration_sec, 1),
         "error": result.error,
-        **{k: result.config[k] for k in PARAM_ORDER},
+        **{k: result.config[k] for k in CONFIG_KEYS},
     }
     write_header = not TRIALS_CSV.exists()
     with open(TRIALS_CSV, "a", newline="", encoding="utf-8") as f:
@@ -224,6 +223,37 @@ def _save_state(
         "round_idx": round_idx,
         "updated": datetime.now().isoformat(timespec="seconds"),
     }, indent=2), encoding="utf-8")
+
+
+def _config_from_trials_row(row: dict[str, str]) -> dict[str, float | int]:
+    cfg: dict[str, float | int] = {}
+    for k in CONFIG_KEYS:
+        v = float(row[k])
+        cfg[k] = int(v) if k == "batch_size" else v
+    return cfg
+
+
+def _bootstrap_from_trials() -> dict[str, Any] | None:
+    """Rebuild resume state from trials.csv when state.json is missing (e.g. after a crash)."""
+    if not TRIALS_CSV.exists():
+        return None
+    with open(TRIALS_CSV, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    ok_rows = [r for r in rows if r.get("status") == "ok"]
+    if not ok_rows:
+        return None
+    completed_keys = {_config_key(_config_from_trials_row(r)) for r in ok_rows}
+    trial_id = max(int(r["trial_id"]) for r in rows)
+    best_row = max(ok_rows, key=lambda r: float(r["auc_roc"]))
+    last_row = max(ok_rows, key=lambda r: int(r["trial_id"]))
+    return {
+        "trial_id": trial_id,
+        "best_config": _config_from_trials_row(best_row),
+        "best_auc": float(best_row["auc_roc"]),
+        "completed_keys": sorted(completed_keys),
+        "round_idx": 0,
+        "prev_config": _config_from_trials_row(last_row),
+    }
 
 
 def _load_state() -> dict[str, Any] | None:
@@ -299,6 +329,10 @@ def run_trial(
 
 def coordinate_descent(args: argparse.Namespace) -> None:
     state = _load_state() if args.resume else None
+    if args.resume and state is None:
+        state = _bootstrap_from_trials()
+        if state:
+            print("[resume] Rebuilt state from trials.csv (state.json was missing).")
     if state and not args.resume:
         state = None
 
@@ -310,18 +344,22 @@ def coordinate_descent(args: argparse.Namespace) -> None:
     prev_config: dict[str, float | int] | None = None
 
     if state:
-        config = {k: state["best_config"][k] for k in PARAM_ORDER}
+        config = {k: state["best_config"][k] for k in CONFIG_KEYS}
         best_auc = float(state["best_auc"])
         trial_id = int(state["trial_id"])
         completed_keys = set(state.get("completed_keys", []))
         round_idx = int(state.get("round_idx", 0))
+        if state.get("prev_config"):
+            prev_config = {k: state["prev_config"][k] for k in CONFIG_KEYS}
         print(f"[resume] trial_id={trial_id}  best_auc={best_auc:.4f}  round={round_idx}")
         print(f"[resume] config={config}")
+        if prev_config:
+            print(f"[resume] last completed config={prev_config}")
 
     if args.param:
         # Single-parameter sweep mode.
-        if args.param not in PARAM_ORDER:
-            raise ValueError(f"Unknown param {args.param!r}; choose from {PARAM_ORDER}")
+        if args.param not in TUNE_PARAM_ORDER:
+            raise ValueError(f"Unknown param {args.param!r}; choose from {TUNE_PARAM_ORDER}")
         values = args.values or CANDIDATE_GRIDS[args.param]
         for value in values:
             trial_id += 1
@@ -362,13 +400,14 @@ def coordinate_descent(args: argparse.Namespace) -> None:
         if result.status == "ok":
             best_auc = result.auc_roc
             _save_best(config, best_auc, args.target, args.baseline)
+        _save_state(trial_id, config, best_auc, completed_keys, round_idx)
 
     while round_idx < args.max_rounds:
         round_idx += 1
         print(f"\n{'=' * 60}\n  ROUND {round_idx}/{args.max_rounds}  best AUC-ROC={best_auc:.4f}\n{'=' * 60}")
         improved_round = False
 
-        for param in PARAM_ORDER:
+        for param in TUNE_PARAM_ORDER:
             print(f"\n>>> Tuning {param} (current={config[param]})")
             best_for_param = config[param]
             best_param_auc = best_auc
@@ -432,7 +471,7 @@ def _print_summary(
     print(f"  Target                  : {target:.2f}  "
           f"{'REACHED ✓' if auc >= target else 'not yet'}")
     print("\n  Best config:")
-    for k in PARAM_ORDER:
+    for k in CONFIG_KEYS:
         print(f"    {k:18s} {config[k]}")
     print(f"\n  Saved to {BEST_JSON}")
     print(f"  All trials logged to {TRIALS_CSV}")
@@ -467,7 +506,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-preprocess", action="store_true",
                         help="Never rerun preprocessing (train/eval only).")
     parser.add_argument("--param", type=str, default=None,
-                        help="Sweep only this parameter (e.g. window_sec).")
+                        help="Sweep only this parameter (e.g. step_sec).")
     parser.add_argument("--values", type=float, nargs="+", default=None,
                         help="Values to try with --param (default: built-in grid).")
     return parser.parse_args()
