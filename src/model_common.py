@@ -26,24 +26,40 @@ from preprocess_common import load_preprocessed, subject_aware_split
 class SeizureCNN(nn.Module):
     def __init__(self, n_channels: int, n_timepoints: int) -> None:
         super().__init__()
+        # Guard: after two MaxPool1d(4) the sequence is n_timepoints//16.
+        # AdaptiveAvgPool1d(8) requires at least 1 element going in.
+        min_len = n_timepoints // 16
+        if min_len < 1:
+            raise ValueError(
+                f"n_timepoints={n_timepoints} is too short for two MaxPool1d(4) layers "
+                f"(minimum required: 16)."
+            )
+
         self.conv_block = nn.Sequential(
             nn.Conv1d(n_channels, 32, kernel_size=15, padding=7),
+            # bias=False: BatchNorm subtracts the channel mean, making conv bias a no-op.
+            nn.Conv1d(n_channels, 32, kernel_size=15, padding=7, bias=False),
             nn.BatchNorm1d(32),
             nn.ELU(),
             nn.MaxPool1d(4),
             nn.Dropout(0.25),
+            nn.Dropout1d(0.25),   # zeros full channels, correct for 1-D conv
 
             nn.Conv1d(32, 64, kernel_size=9, padding=4),
+            nn.Conv1d(32, 64, kernel_size=9, padding=4, bias=False),
             nn.BatchNorm1d(64),
             nn.ELU(),
             nn.MaxPool1d(4),
             nn.Dropout(0.25),
+            nn.Dropout1d(0.25),
 
             nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.Conv1d(64, 128, kernel_size=5, padding=2, bias=False),
             nn.BatchNorm1d(128),
             nn.ELU(),
             nn.AdaptiveAvgPool1d(8),
             nn.Dropout(0.25),
+            nn.Dropout1d(0.25),
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -68,17 +84,24 @@ class BandPowerSeqCNN(nn.Module):
 
     def __init__(self, n_features: int, n_frames: int) -> None:
         super().__init__()
+        if n_frames < 1:
+            raise ValueError(f"n_frames={n_frames} must be >= 1.")
+
         self.conv_block = nn.Sequential(
             nn.Conv1d(n_features, 64, kernel_size=5, padding=2),
+            nn.Conv1d(n_features, 64, kernel_size=5, padding=2, bias=False),
             nn.BatchNorm1d(64),
             nn.ELU(),
             nn.Dropout(0.3),
+            nn.Dropout1d(0.3),
 
             nn.Conv1d(64, 64, kernel_size=3, padding=1),
+            nn.Conv1d(64, 64, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm1d(64),
             nn.ELU(),
             nn.AdaptiveAvgPool1d(8),
             nn.Dropout(0.3),
+            nn.Dropout1d(0.3),
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -120,11 +143,13 @@ def pick_device(no_gpu: bool) -> torch.device:
 def _val_positive_prob(model: SeizureCNN, x: np.ndarray, device: torch.device,
                        batch_size: int, amp_on: bool) -> np.ndarray:
     """p(pre-ictal) over a held-out array, batched (keeps VRAM low; x stays on CPU)."""
+    device_type = device.type if device.type in ("cuda", "cpu") else "cpu"
     model.eval()
     probs = []
     for i in range(0, len(x), batch_size):
         xb = torch.from_numpy(x[i:i + batch_size]).to(device)
         with torch.amp.autocast("cuda", enabled=amp_on):
+        with torch.amp.autocast(device_type, enabled=amp_on):
             out = model(xb)
         probs.append(torch.softmax(out.float(), dim=1)[:, 1].cpu().numpy())
     model.train()
@@ -160,8 +185,10 @@ def train_model(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     # Mixed precision ~2x on CUDA; silently a no-op on CPU/MPS.
+    device_type = device.type if device.type in ("cuda", "cpu") else "cpu"
     amp_on = bool(use_amp) and device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=amp_on)
+    scaler = torch.amp.GradScaler(device_type, enabled=amp_on)
 
     # Keep the full training set in CPU RAM and move only each batch to the GPU.
     # Moving the whole set with .to(device) OOMs on small cards (e.g. 4 GB laptop
@@ -187,6 +214,7 @@ def train_model(
             yb = yb.to(device, non_blocking=pin)
             optimizer.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", enabled=amp_on):
+            with torch.amp.autocast(device_type, enabled=amp_on):
                 loss = criterion(model(xb), yb)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -242,8 +270,10 @@ def add_training_args(parser: argparse.ArgumentParser, default_data: Path, defau
                         help="Comma-separated subject IDs to use for training, e.g. "
                              "'sub-001,sub-002,...,sub-016'. Overrides --train-frac.")
     parser.add_argument("--epochs", type=int, default=30,
+    parser.add_argument("--epochs", type=int, default=60,
                         help="Max epochs; early stopping usually halts well before this.")
     parser.add_argument("--patience", type=int, default=5,
+    parser.add_argument("--patience", type=int, default=15,
                         help="Early-stop after this many epochs without val-AUC improvement "
                              "(default 5). Ignored when there is no validation set.")
     parser.add_argument("--batch-size", type=int, default=128)
@@ -254,6 +284,7 @@ def add_training_args(parser: argparse.ArgumentParser, default_data: Path, defau
     parser.add_argument("--no-gpu", action="store_true")
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--ensemble-runs", type=int, default=1,
+    parser.add_argument("--ensemble-runs", type=int, default=5,
                         help="Train N independent models; evaluation averages their "
                              "class probabilities (soft voting). Default 1 = no ensemble.")
     parser.add_argument("--save-model", type=Path, default=default_model)
