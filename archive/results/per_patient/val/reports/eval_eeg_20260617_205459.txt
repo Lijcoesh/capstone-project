@@ -1,0 +1,37 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.5
+  eval split=VAL   model=models/per_patient/cnn_sub-002.pt   epochs=30   seed=42
+============================================================
+  Precision      : 0.175
+  Recall (sens.) : 1.000
+  Specificity    : 0.058
+  F1             : 0.298
+  Accuracy       : 0.215   (misleading under imbalance)
+  Balanced acc   : 0.529
+  Confusion [tn fp fn tp]: [97 1583 0 336]
+
+  AUC-ROC        : 0.664   (0.50 = chance)
+  AUC-PR         : 0.253   (baseline 0.167 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.664            0.664  (n=1)
+     30s (6 win)       0.672            0.672  (n=1)
+     60s (12 win)      0.673            0.673  (n=1)
+    120s (24 win)      0.683            0.683  (n=1)
+
+  Over/underfit  : train F1 0.347  vs  test F1 0.298  (gap +0.049)
+
+  Threshold sweep (P / R / F1):
+    thr 0.2:  P 0.169   R 1.000   F1 0.290
+    thr 0.3:  P 0.170   R 1.000   F1 0.290
+    thr 0.4:  P 0.171   R 1.000   F1 0.292
+    thr 0.5:  P 0.175   R 1.000   F1 0.298  <-- current
+    thr 0.6:  P 0.196   R 0.964   F1 0.325
+    thr 0.7:  P 0.221   R 0.818   F1 0.348
+    thr 0.8:  P 0.260   R 0.039   F1 0.067
+
+  Per-subject val (AUC = within-patient ranking quality):
+    sub-002:  AUC 0.664   P 0.175   R 1.000   F1 0.298   (n_preictal 336 / 2016)
+    mean per-subject AUC (subjects with positives): 0.664 ± 0.000  (n=1)
+============================================================

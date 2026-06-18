@@ -1,20 +1,36 @@
 ==========================================================
   RandomForest BASELINE   feature_set=eeg_ecg
-  split=TEST   n_test=106,340   pre-ictal=17,977
+  split=TEST   n_eval=42,154   pre-ictal=7,129
 ==========================================================
-  AUC-ROC                : 0.568   (0.50 = chance)
-  AUC-PR                 : 0.205   (baseline 0.169)
-  mean per-subject AUC   : 0.554 +/- 0.230   (n=56)
-  Precision/Recall/F1    : 0.246 / 0.116 / 0.157
-  Confusion [tn fp fn tp]: [82004 6359 15898 2079]
+  AUC-ROC                : 0.530   (0.50 = chance)
+  AUC-PR                 : 0.179   (baseline 0.169)
+  mean per-subject AUC   : 0.560 +/- 0.268   (n=56)
+  mean per-subj AUC (sm) : 0.595   (best smoothing 120s)
+  Precision/Recall/F1    : 0.166 / 0.139 / 0.152   (@ thr 0.31, val-tuned (best F1 on VAL))
+  Confusion [tn fp fn tp]: [30030 4995 6135 994]
+  @ thr 0.50 (CNN default): P 0.172 / R 0.070 / F1 0.100  [32617 2408 6629 500]
+
+  Prob pre-ictal  mean/median: 0.208 / 0.167
+  Prob interictal mean/median: 0.202 / 0.157
+
+  Threshold sweep (P / R / F1):
+    thr 0.10:  P 0.180   R 0.822   F1 0.295
+    thr 0.15:  P 0.188   R 0.616   F1 0.288
+    thr 0.20:  P 0.179   R 0.354   F1 0.238
+    thr 0.30:  P 0.165   R 0.149   F1 0.157
+    thr 0.40:  P 0.160   R 0.092   F1 0.117
+    thr 0.50:  P 0.172   R 0.070   F1 0.100
+    thr 0.60:  P 0.182   R 0.056   F1 0.086
+
+  Threshold tuning: best F1 on VAL = 0.336 at thr 0.31
 
   Top band-power features (RF importance):
-    ECG SD_beta        0.084
-    ECG SD_delta       0.084
-    ECG SD_gamma       0.081
-    ECG SD_theta       0.079
-    ECG SD_alpha       0.079
-    CROSStop SD_gamma  0.073
+    ECG SD_delta       0.080
+    ECG SD_alpha       0.078
+    ECG SD_gamma       0.076
+    ECG SD_beta        0.074
+    ECG SD_theta       0.073
+    CROSStop SD_gamma  0.067
+    BTEleft SD_beta    0.066
     BTEleft SD_gamma   0.066
-    BTEleft SD_beta    0.063
 ==========================================================

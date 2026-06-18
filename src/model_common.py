@@ -57,6 +57,48 @@ class SeizureCNN(nn.Module):
         return self.classifier(self.conv_block(x))
 
 
+class BandPowerSeqCNN(nn.Module):
+    """1-D CNN over a band-power sequence: input (channels*bands, n_frames).
+
+    Lighter than SeizureCNN (small kernels, no aggressive pooling) because the input
+    is a short feature sequence (~tens of frames), not a long raw waveform. It convolves
+    over time so it can pick up how the spectral content evolves toward onset — the
+    temporal dynamics a per-window RandomForest averages away.
+    """
+
+    def __init__(self, n_features: int, n_frames: int) -> None:
+        super().__init__()
+        self.conv_block = nn.Sequential(
+            nn.Conv1d(n_features, 64, kernel_size=5, padding=2),
+            nn.BatchNorm1d(64),
+            nn.ELU(),
+            nn.Dropout(0.3),
+
+            nn.Conv1d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ELU(),
+            nn.AdaptiveAvgPool1d(8),
+            nn.Dropout(0.3),
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(64 * 8, 64),
+            nn.ELU(),
+            nn.Dropout(0.5),
+            nn.Linear(64, 2),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.conv_block(x))
+
+
+def build_model(input_rep: str, n_channels: int, n_timepoints: int) -> nn.Module:
+    """Pick the architecture for the input representation stored in the dataset."""
+    if input_rep == "bandpower_seq":
+        return BandPowerSeqCNN(n_channels, n_timepoints)
+    return SeizureCNN(n_channels, n_timepoints)
+
+
 # ── Device ────────────────────────────────────────────────────────────────────
 
 def pick_device(no_gpu: bool) -> torch.device:
@@ -101,12 +143,13 @@ def train_model(
         y_val: np.ndarray | None = None,
         patience: int = 5,
         use_amp: bool = True,
-) -> SeizureCNN:
+        input_rep: str = "raw",
+) -> nn.Module:
     torch.manual_seed(random_state)
     np.random.seed(random_state)
 
     n_channels, n_timepoints = x_train.shape[1], x_train.shape[2]
-    model = SeizureCNN(n_channels, n_timepoints).to(device)
+    model = build_model(input_rep, n_channels, n_timepoints).to(device)
 
     # Class imbalance: weight the positive (pre-ictal) class by how much rarer it is.
     n_neg = int((y_train == 0).sum())
@@ -229,9 +272,10 @@ def run_training(args: argparse.Namespace) -> None:
     print(f"\n[Data] Loading preprocessed dataset: {args.data}")
     data = load_preprocessed(args.data)
     x, y = data["X"], data["y"]
-    print(f"[Data] {len(x)} windows, {x.shape[1]} channels, {x.shape[2]} timepoints/window, "
-          f"notch={data['notch_freq']:.0f} Hz, window={data['window_sec']:.1f}s, "
-          f"interictal_ratio={data['interictal_ratio']:.0f}")
+    input_rep = data.get("input_rep", "raw")
+    print(f"[Data] {len(x)} windows, {x.shape[1]} features, {x.shape[2]} steps/window, "
+          f"input_rep={input_rep}, notch={data['notch_freq']:.0f} Hz, "
+          f"window={data['window_sec']:.1f}s, interictal_ratio={data['interictal_ratio']:.0f}")
 
     # within-subject class-stratified chronological split (default)
     # or subject-level split when --train-subjects is given
@@ -254,7 +298,7 @@ def run_training(args: argparse.Namespace) -> None:
               f"val={len(val_idx):,}")
 
     n_runs = max(1, args.ensemble_runs)
-    models: list[SeizureCNN] = []
+    models: list[nn.Module] = []
     for run in range(n_runs):
         run_seed = args.random_state + run
         print(f"\nTraining CNN (run {run + 1}/{n_runs}, seed={run_seed}) ...")
@@ -264,11 +308,13 @@ def run_training(args: argparse.Namespace) -> None:
             lr=args.lr, random_state=run_seed,
             x_val=x_val, y_val=y_val,
             patience=args.patience, use_amp=not args.no_amp,
+            input_rep=input_rep,
         ))
 
     meta = {
         "task": "prediction",
         "split": "subject_level" if train_subjects else "within_subject_stratified",
+        "input_rep": input_rep,
         "n_channels": n_channels,
         "n_timepoints": n_timepoints,
         "train_frac": args.train_frac,

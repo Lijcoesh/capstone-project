@@ -1,0 +1,6 @@
+timestamp,feature_set,eval_split,train_frac,val_frac,epochs,random_state,n_runs,interictal_ratio,preictal_sec,normalize,pred_threshold,pred_min_run,precision,recall,f1,accuracy,balanced_acc,auc_roc,auc_pr,mean_subj_auc,smooth_sec,auc_roc_smooth,mean_subj_auc_smooth,train_f1,tn,fp,fn,tp,n_test,n_test_preictal,model_path
+2026-06-17T18:18:42,eeg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.2048,0.5267,0.2949,0.5739,0.5551,0.5585,0.1964,0.4933,60,0.5636,0.4977,0.328,5098,3639,842,937,10516,1779,models/n60/cnn_eeg_s42.pt
+2026-06-17T18:22:13,eeg,val,0.6,0.2,30,43,1,5.0,600.0,per_recording,0.5,2,0.2195,0.4334,0.2914,0.6434,0.5598,0.5602,0.1963,0.5006,120,0.571,0.5079,0.3002,5995,2742,1008,771,10516,1779,models/n60/cnn_eeg_s43.pt
+2026-06-17T18:25:24,eeg,val,0.6,0.2,30,44,1,5.0,600.0,per_recording,0.5,2,0.1987,0.6037,0.299,0.521,0.5539,0.5675,0.2005,0.4978,120,0.58,0.5038,0.3088,4405,4332,705,1074,10516,1779,models/n60/cnn_eeg_s44.pt
+2026-06-17T18:29:04,eeg,val,0.6,0.2,30,45,1,5.0,600.0,per_recording,0.5,2,0.1902,0.6818,0.2975,0.4552,0.5455,0.5649,0.2019,0.5033,120,0.5743,0.5135,0.32,3574,5163,566,1213,10516,1779,models/n60/cnn_eeg_s45.pt
+2026-06-17T18:32:16,eeg,val,0.6,0.2,30,46,1,5.0,600.0,per_recording,0.5,2,0.1804,0.5852,0.2758,0.4801,0.5219,0.5439,0.1914,0.4985,60,0.5507,0.5057,0.301,4008,4729,738,1041,10516,1779,models/n60/cnn_eeg_s46.pt

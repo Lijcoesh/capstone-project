@@ -41,7 +41,19 @@ SEIZEIT2_NOTCH_HZ = 50.0
 PREICTAL_SEC = 10 * 60          # 10 min before onset = pre-ictal (positive)
 POSTICTAL_GUARD_SEC = 10 * 60   # exclude the seizure + 10 min after it
 
-DEFAULT_INTERICTAL_RATIO = 5.0  # interictal : pre-ictal windows kept
+# Labeling task:
+#   "prediction" — pre-ictal (before onset) vs interictal. The real research task.
+#   "detection"  — ictal (during the seizure) vs interictal. Much easier; used as a
+#                  sanity check ("can this pipeline learn anything at all?"). If
+#                  detection AUC is high while prediction sits at chance, the pipeline
+#                  is sound and prediction is simply the hard part.
+LABEL_MODE_CHOICES = ("prediction", "detection")
+DEFAULT_LABEL_MODE = "prediction"
+# In detection mode, drop windows within this guard around each seizure so the
+# interictal class is clearly away from any seizure (no pre/post-ictal contamination).
+DETECTION_GUARD_SEC = 10 * 60
+
+DEFAULT_INTERICTAL_RATIO = 5.0  # interictal : positive (pre-ictal/ictal) windows kept
 DEFAULT_WINDOW_SEC = 2.0
 DEFAULT_STEP_SEC = 1.0
 
@@ -54,6 +66,47 @@ DEFAULT_STEP_SEC = 1.0
 #                     higher on validation AUC than per_window.
 NORMALIZE_CHOICES = ("per_window", "per_recording")
 DEFAULT_NORMALIZE = "per_recording"
+
+# Input representation:
+#   "raw"           — the raw (notched, z-scored) waveform, shape (channels, time).
+#   "bandpower_seq" — log band-power computed in short frames stepped across the
+#                     window, shape (channels*bands, n_frames). This is the RF's
+#                     band-power feature set, but kept as a TIME SEQUENCE so the CNN
+#                     can see how the spectral content evolves toward onset — the
+#                     temporal dynamics the RF averages away. Tiny vs raw (~270x
+#                     smaller), so it also sidesteps the raw-waveform RAM blow-up.
+INPUT_REP_CHOICES = ("raw", "bandpower_seq")
+DEFAULT_INPUT_REP = "raw"
+# Frames for bandpower_seq: 4 s frame, 1 s hop (e.g. a 60 s window -> 57 frames).
+DEFAULT_FRAME_SEC = 4.0
+DEFAULT_FRAME_STEP_SEC = 1.0
+# Band-power bands (stay below the 50 Hz mains notch; gamma capped at 45 Hz).
+BANDPOWER_BANDS = [("delta", 0.5, 4.0), ("theta", 4.0, 8.0), ("alpha", 8.0, 13.0),
+                   ("beta", 13.0, 30.0), ("gamma", 30.0, 45.0)]
+
+
+def bandpower_sequence(seg: np.ndarray, sfreq: float,
+                       frame_sec: float = DEFAULT_FRAME_SEC,
+                       frame_step_sec: float = DEFAULT_FRAME_STEP_SEC) -> np.ndarray:
+    """Raw window (channels, time) -> log band-power sequence (channels*bands, n_frames).
+
+    Each frame's per-channel band-powers are flattened channel-major
+    (ch0_delta, ch0_theta, ..., ch1_delta, ...), one column per frame.
+    """
+    n_ch, T = seg.shape
+    frame_n = max(1, int(round(frame_sec * sfreq)))
+    step_n = max(1, int(round(frame_step_sec * sfreq)))
+    if T < frame_n:
+        frame_n = T
+    freqs = np.fft.rfftfreq(frame_n, d=1.0 / sfreq)
+    masks = [(freqs >= lo) & (freqs < hi) for _, lo, hi in BANDPOWER_BANDS]
+    cols = []
+    for s0 in range(0, T - frame_n + 1, step_n):
+        frame = seg[:, s0:s0 + frame_n]
+        power = np.abs(np.fft.rfft(frame, axis=-1)) ** 2          # (n_ch, F)
+        bp = np.stack([power[:, m].sum(axis=-1) for m in masks], axis=1)  # (n_ch, bands)
+        cols.append(np.log1p(bp).reshape(-1))                     # (n_ch*bands,)
+    return np.stack(cols, axis=1).astype(np.float32)              # (n_ch*bands, n_frames)
 
 
 @dataclass
@@ -126,8 +179,27 @@ def apply_notch_filter(raw: mne.io.BaseRaw, notch_freq: float = SEIZEIT2_NOTCH_H
 def _classify_window(
         ws: float, we: float, seizures: list[tuple[float, float]],
         preictal_sec: float = PREICTAL_SEC,
+        label_mode: str = DEFAULT_LABEL_MODE,
 ) -> str:
-    """Classify a window [ws, we) as 'exclude', 'preictal', or 'interictal'."""
+    """Classify a window [ws, we) as 'exclude', 'positive', or 'interictal'.
+
+    prediction mode (default): positive = pre-ictal [onset - preictal_sec, onset);
+        exclude = the seizure itself + a post-ictal guard.
+    detection mode: positive = ictal (overlaps [onset, onset + dur]); exclude = a
+        guard band around each seizure so interictal stays clear of pre/post-ictal.
+    """
+    if label_mode == "detection":
+        # positive: window overlaps the seizure itself
+        for onset, dur in seizures:
+            if we > onset and ws < onset + dur:
+                return "positive"
+        # exclude a guard band around each seizure (keeps interictal clean)
+        for onset, dur in seizures:
+            if we > onset - DETECTION_GUARD_SEC and ws < onset + dur + DETECTION_GUARD_SEC:
+                return "exclude"
+        return "interictal"
+
+    # prediction (default)
     # exclude takes priority: ictal + post-ictal guard
     for onset, dur in seizures:
         ictal_start = onset
@@ -138,7 +210,7 @@ def _classify_window(
     for onset, _dur in seizures:
         pre_start = onset - preictal_sec
         if we > pre_start and ws < onset:
-            return "preictal"
+            return "positive"
     return "interictal"
 
 
@@ -179,11 +251,16 @@ def build_recording_windows(
         rng: np.random.Generator,
         preictal_sec: float = PREICTAL_SEC,
         normalize: str = DEFAULT_NORMALIZE,
+        label_mode: str = DEFAULT_LABEL_MODE,
+        input_rep: str = DEFAULT_INPUT_REP,
+        frame_sec: float = DEFAULT_FRAME_SEC,
+        frame_step_sec: float = DEFAULT_FRAME_STEP_SEC,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], float]:
     """
-    Build the kept windows for one recording: ALL pre-ictal + a subsampled set of
-    interictal (ratio : 1). Returns (X, y, centers, channel_names, sfreq).
-    Recordings with no seizures contribute nothing (no pre-ictal → returns empty).
+    Build the kept windows for one recording: ALL positive (pre-ictal in prediction
+    mode, ictal in detection mode) + a subsampled set of interictal (ratio : 1).
+    Returns (X, y, centers, channel_names, sfreq). Recordings with no seizures
+    contribute nothing (no positives → returns empty).
     """
     seizures = parse_seizure_events(rec.events_path)
     if not seizures:
@@ -196,45 +273,69 @@ def build_recording_windows(
     win_n = int(round(window_sec * sfreq))
 
     starts = np.arange(0.0, max(0.0, total_dur - window_sec), step_sec, dtype=float)
-    preictal_starts: list[float] = []
+    positive_starts: list[float] = []
     interictal_starts: list[float] = []
     for ws in starts:
-        label = _classify_window(ws, ws + window_sec, seizures, preictal_sec)
-        if label == "preictal":
-            preictal_starts.append(ws)
+        label = _classify_window(ws, ws + window_sec, seizures, preictal_sec, label_mode)
+        if label == "positive":
+            positive_starts.append(ws)
         elif label == "interictal":
             interictal_starts.append(ws)
         # 'exclude' -> dropped
 
-    if not preictal_starts:
+    if not positive_starts:
         return (np.empty((0, 0, 0), np.float32), np.empty(0, np.int64),
                 np.empty(0, np.float64), channel_names, sfreq)
 
     # subsample interictal to ratio : 1
-    target = int(round(interictal_ratio * len(preictal_starts)))
+    target = int(round(interictal_ratio * len(positive_starts)))
     if len(interictal_starts) > target:
         idx = rng.choice(len(interictal_starts), size=target, replace=False)
         interictal_starts = [interictal_starts[i] for i in sorted(idx)]
 
-    kept = ([(ws, 1) for ws in preictal_starts]
+    kept = ([(ws, 1) for ws in positive_starts]
             + [(ws, 0) for ws in interictal_starts])
     kept.sort(key=lambda t: t[0])               # chronological order
 
-    # per-recording stats: one mean/std per channel over the whole recording, used
-    # only for normalize == "per_recording". (Whole-recording stats include the
-    # later val/test windows — a negligible 2-scalar/channel effect, and the
-    # conventional way to normalize continuous EEG.)
-    if normalize == "per_recording":
-        rec_mu = data.mean(axis=1, keepdims=True).astype(np.float32)
-        rec_std = data.std(axis=1, keepdims=True).astype(np.float32) + 1e-8
-
-    segs, labels, centers = [], [], []
+    # Extract raw windows first (un-normalized); representation + normalization below.
+    raw_segs, labels, centers = [], [], []
     for ws, lab in kept:
         i0 = int(round(ws * sfreq))
         i1 = i0 + win_n
         if i1 > n_samples:
             continue
-        seg = data[:, i0:i1].astype(np.float32)
+        raw_segs.append(data[:, i0:i1].astype(np.float32))
+        labels.append(lab)
+        centers.append(ws + 0.5 * window_sec)
+
+    if input_rep == "bandpower_seq":
+        # Transform each raw window to its log band-power sequence, then z-score the
+        # band-power features. per_recording z-scores each feature over ALL frames of
+        # the recording (removes the per-subject spectral baseline -> attacks the
+        # between-subject shortcut), keeping the temporal dynamics; per_window
+        # z-scores within each window.
+        X = np.stack([bandpower_sequence(s, sfreq, frame_sec, frame_step_sec)
+                      for s in raw_segs])                 # (N, ch*bands, n_frames)
+        if normalize == "per_recording":
+            mu = X.mean(axis=(0, 2), keepdims=True)
+            std = X.std(axis=(0, 2), keepdims=True) + 1e-8
+        else:  # per_window
+            mu = X.mean(axis=2, keepdims=True)
+            std = X.std(axis=2, keepdims=True) + 1e-8
+        X = (X - mu) / std
+        feat_names = [f"{c}_{b}" for c in channel_names for b, _, _ in BANDPOWER_BANDS]
+        return (X.astype(np.float32), np.array(labels, dtype=np.int64),
+                np.array(centers, dtype=np.float64), feat_names, sfreq)
+
+    # raw representation (default)
+    # per-recording stats: one mean/std per channel over the whole recording, used
+    # only for normalize == "per_recording".
+    if normalize == "per_recording":
+        rec_mu = data.mean(axis=1, keepdims=True).astype(np.float32)
+        rec_std = data.std(axis=1, keepdims=True).astype(np.float32) + 1e-8
+
+    segs = []
+    for seg in raw_segs:
         if normalize == "per_recording":
             seg = (seg - rec_mu) / rec_std
         else:  # per_window (default)
@@ -242,8 +343,6 @@ def build_recording_windows(
             std = seg.std(axis=1, keepdims=True) + 1e-8
             seg = (seg - mu) / std
         segs.append(seg)
-        labels.append(lab)
-        centers.append(ws + 0.5 * window_sec)
 
     return (np.stack(segs), np.array(labels, dtype=np.int64),
             np.array(centers, dtype=np.float64), channel_names, sfreq)
@@ -262,6 +361,10 @@ def build_dataset(
         preictal_sec: float = PREICTAL_SEC,
         normalize: str = DEFAULT_NORMALIZE,
         require_ecg: bool = False,
+        label_mode: str = DEFAULT_LABEL_MODE,
+        input_rep: str = DEFAULT_INPUT_REP,
+        frame_sec: float = DEFAULT_FRAME_SEC,
+        frame_step_sec: float = DEFAULT_FRAME_STEP_SEC,
 ) -> dict:
     """Build the full windowed dataset across all (or selected) SeizeIT2 recordings.
 
@@ -295,7 +398,8 @@ def build_dataset(
     for rec in tqdm(recordings, desc="Recordings", unit="rec"):
         x, y, centers, ch, sf = build_recording_windows(
             rec, include_ecg, window_sec, step_sec, interictal_ratio, rng,
-            preictal_sec=preictal_sec, normalize=normalize,
+            preictal_sec=preictal_sec, normalize=normalize, label_mode=label_mode,
+            input_rep=input_rep, frame_sec=frame_sec, frame_step_sec=frame_step_sec,
         )
         if len(x) == 0:
             continue
@@ -308,18 +412,22 @@ def build_dataset(
         event_paths.append(str(rec.events_path))
         file_slices.append((start_idx, start_idx + len(x)))
         start_idx += len(x)
+        pos_label = "ictal" if label_mode == "detection" else "pre-ictal"
         print(f"  [{rec.subject}] {rec.run}: {len(x):>5} windows "
-              f"({int(y.sum())} pre-ictal, {int((y == 0).sum())} interictal)")
+              f"({int(y.sum())} {pos_label}, {int((y == 0).sum())} interictal)")
 
     if not all_x:
-        raise ValueError("No pre-ictal windows found — no usable recordings.")
+        raise ValueError("No positive windows found — no usable recordings.")
 
     x = np.concatenate(all_x, axis=0)
     y = np.concatenate(all_y, axis=0)
     centers = np.concatenate(all_centers, axis=0)
-    print(f"\nDataset  total={len(x)}  pre-ictal={int(y.sum())}  "
-          f"interictal={int((y == 0).sum())}  channels={x.shape[1]}  "
-          f"timepoints={x.shape[2]}  preictal_sec={int(preictal_sec)}  normalize={normalize}")
+    pos_label = "ictal" if label_mode == "detection" else "pre-ictal"
+    dim2 = "n_frames" if input_rep == "bandpower_seq" else "timepoints"
+    print(f"\nDataset  total={len(x)}  {pos_label}={int(y.sum())}  "
+          f"interictal={int((y == 0).sum())}  features={x.shape[1]}  "
+          f"{dim2}={x.shape[2]}  preictal_sec={int(preictal_sec)}  "
+          f"normalize={normalize}  label_mode={label_mode}  input_rep={input_rep}")
 
     return {
         "x": x, "y": y, "centers": centers,
@@ -328,6 +436,10 @@ def build_dataset(
         "interictal_ratio": interictal_ratio,
         "preictal_sec": preictal_sec,
         "normalize": normalize,
+        "label_mode": label_mode,
+        "input_rep": input_rep,
+        "frame_sec": frame_sec,
+        "frame_step_sec": frame_step_sec,
         "recording_paths": rec_paths, "event_paths": event_paths,
         "file_slices": file_slices,
     }
@@ -349,6 +461,10 @@ def save_preprocessed(out_path: Path, result: dict) -> None:
         interictal_ratio=np.array(result["interictal_ratio"], dtype=np.float64),
         preictal_sec=np.array(result.get("preictal_sec", PREICTAL_SEC), dtype=np.float64),
         normalize=np.array(result.get("normalize", DEFAULT_NORMALIZE)),
+        label_mode=np.array(result.get("label_mode", DEFAULT_LABEL_MODE)),
+        input_rep=np.array(result.get("input_rep", DEFAULT_INPUT_REP)),
+        frame_sec=np.array(result.get("frame_sec", DEFAULT_FRAME_SEC), dtype=np.float64),
+        frame_step_sec=np.array(result.get("frame_step_sec", DEFAULT_FRAME_STEP_SEC), dtype=np.float64),
         recording_paths=np.array(result["recording_paths"]),
         event_paths=np.array(result["event_paths"]),
         file_slices=np.array(result["file_slices"], dtype=np.int64).reshape(-1, 2),
@@ -373,6 +489,10 @@ def load_preprocessed(path: Path) -> dict:
         "interictal_ratio": float(npz["interictal_ratio"]),
         "preictal_sec": float(npz["preictal_sec"]),
         "normalize": str(npz["normalize"]) if "normalize" in npz else DEFAULT_NORMALIZE,
+        "label_mode": str(npz["label_mode"]) if "label_mode" in npz else DEFAULT_LABEL_MODE,
+        "input_rep": str(npz["input_rep"]) if "input_rep" in npz else DEFAULT_INPUT_REP,
+        "frame_sec": float(npz["frame_sec"]) if "frame_sec" in npz else DEFAULT_FRAME_SEC,
+        "frame_step_sec": float(npz["frame_step_sec"]) if "frame_step_sec" in npz else DEFAULT_FRAME_STEP_SEC,
         "recording_paths": [Path(p) for p in npz["recording_paths"]],
         "event_paths": [Path(p) for p in npz["event_paths"]],
         "file_slices": [tuple(int(v) for v in row) for row in npz["file_slices"]],

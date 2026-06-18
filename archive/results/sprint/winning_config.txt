@@ -1,0 +1,7 @@
+﻿name=w50s5
+window_sec=50
+step_sec=5
+cnn_mean_subj_auc_smooth=0.5904
+rf_mean_subj_auc_smooth=0.7278
+preictal_min=10
+picked_at=2026-06-18 01:48:48
