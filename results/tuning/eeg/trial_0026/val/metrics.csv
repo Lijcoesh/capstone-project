@@ -1,0 +1,2 @@
+timestamp,feature_set,eval_split,train_frac,val_frac,epochs,random_state,n_runs,interictal_ratio,preictal_sec,normalize,pred_threshold,pred_min_run,precision,recall,f1,accuracy,balanced_acc,auc_roc,auc_pr,mean_subj_auc,smooth_sec,auc_roc_smooth,mean_subj_auc_smooth,train_f1,tn,fp,fn,tp,n_test,n_test_preictal,model_path
+2026-06-18T10:32:15,eeg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.2397,0.3686,0.2905,0.6958,0.5654,0.5608,0.1988,0.5247,120,0.5826,0.5594,0.327,138839,43284,23384,13649,219156,37033,results/tuning/eeg/current_model.pt

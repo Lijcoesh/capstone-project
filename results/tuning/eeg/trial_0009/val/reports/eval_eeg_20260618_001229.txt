@@ -1,0 +1,96 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.5
+  eval split=VAL   model=results/tuning/eeg/current_model.pt   epochs=30   seed=42
+============================================================
+  Precision      : 0.270
+  Recall (sens.) : 0.752
+  Specificity    : 0.320
+  F1             : 0.397
+  Accuracy       : 0.428   (misleading under imbalance)
+  Balanced acc   : 0.536
+  Confusion [tn fp fn tp]: [35404 75249 9196 27837]
+
+  AUC-ROC        : 0.561   (0.50 = chance)
+  AUC-PR         : 0.285   (baseline 0.251 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.561            0.515  (n=60)
+     30s (30 win)      0.580            0.547  (n=60)
+     60s (60 win)      0.582            0.554  (n=60)
+    120s (120 win)     0.582            0.561  (n=60)
+
+  Over/underfit  : train F1 0.427  vs  test F1 0.397  (gap +0.029)
+
+  Threshold sweep (P / R / F1):
+    thr 0.2:  P 0.251   R 0.999   F1 0.401
+    thr 0.3:  P 0.251   R 0.998   F1 0.401
+    thr 0.4:  P 0.253   R 0.982   F1 0.402
+    thr 0.5:  P 0.270   R 0.752   F1 0.397  <-- current
+    thr 0.6:  P 0.314   R 0.094   F1 0.145
+    thr 0.7:  P 0.427   R 0.001   F1 0.002
+    thr 0.8:  P 0.000   R 0.000   F1 0.000
+
+  Per-subject val (AUC = within-patient ranking quality):
+    sub-001:  AUC 0.565   P 0.408   R 0.323   F1 0.360   (n_preictal 480 / 1920)
+    sub-002:  AUC 0.502   P 0.258   R 0.963   F1 0.407   (n_preictal 1684 / 6736)
+    sub-003:  AUC 0.546   P 0.325   R 0.867   F1 0.473   (n_preictal 120 / 480)
+    sub-004:  AUC 0.129   P 0.131   R 0.417   F1 0.199   (n_preictal 480 / 1920)
+    sub-005:  AUC 0.617   P 0.365   R 0.287   F1 0.322   (n_preictal 240 / 960)
+    sub-006:  AUC 0.096   P 0.033   R 0.083   F1 0.047   (n_preictal 120 / 480)
+    sub-007:  AUC 0.683   P 0.285   R 0.946   F1 0.438   (n_preictal 240 / 960)
+    sub-008:  AUC 0.536   P 0.351   R 0.142   F1 0.202   (n_preictal 240 / 960)
+    sub-009:  AUC 0.390   P 0.132   R 0.217   F1 0.164   (n_preictal 120 / 480)
+    sub-010:  AUC 0.457   P 0.278   R 0.167   F1 0.208   (n_preictal 120 / 480)
+    sub-011:  AUC 0.568   P 0.268   R 0.621   F1 0.374   (n_preictal 367 / 1466)
+    sub-012:  AUC 0.400   P 0.192   R 0.231   F1 0.210   (n_preictal 360 / 1440)
+    sub-013:  AUC 0.659   P 0.338   R 1.000   F1 0.505   (n_preictal 240 / 960)
+    sub-014:  AUC 0.690   P 0.314   R 0.933   F1 0.470   (n_preictal 240 / 960)
+    sub-015:  AUC 0.644   P 0.300   R 0.897   F1 0.449   (n_preictal 1080 / 4320)
+    sub-016:  AUC 0.165   P 0.049   R 0.104   F1 0.066   (n_preictal 240 / 960)
+    sub-017:  AUC 0.467   P 0.258   R 0.908   F1 0.402   (n_preictal 120 / 480)
+    sub-018:  AUC 0.756   P 0.415   R 0.975   F1 0.582   (n_preictal 120 / 480)
+    sub-019:  AUC 0.561   P 0.290   R 0.508   F1 0.370   (n_preictal 120 / 480)
+    sub-020:  AUC 0.494   P 0.247   R 0.558   F1 0.343   (n_preictal 120 / 480)
+    sub-021:  AUC 0.587   P 0.268   R 0.831   F1 0.406   (n_preictal 480 / 1920)
+    sub-022:  AUC 0.445   P 0.246   R 0.631   F1 0.354   (n_preictal 840 / 3360)
+    sub-023:  AUC 0.321   P 0.238   R 0.842   F1 0.371   (n_preictal 120 / 480)
+    sub-024:  AUC 0.194   P 0.120   R 0.346   F1 0.179   (n_preictal 240 / 960)
+    sub-025:  AUC 0.203   P 0.109   R 0.267   F1 0.154   (n_preictal 360 / 1440)
+    sub-026:  AUC 0.408   P 0.263   R 0.721   F1 0.385   (n_preictal 480 / 1920)
+    sub-027:  AUC 0.789   P 0.260   R 1.000   F1 0.413   (n_preictal 120 / 480)
+    sub-028:  AUC 0.709   P 0.286   R 0.804   F1 0.422   (n_preictal 480 / 1920)
+    sub-029:  AUC 0.525   P 0.295   R 1.000   F1 0.455   (n_preictal 480 / 1920)
+    sub-030:  AUC 0.407   P 0.240   R 0.871   F1 0.377   (n_preictal 840 / 3360)
+    sub-031:  AUC 0.623   P 0.269   R 0.950   F1 0.419   (n_preictal 360 / 1440)
+    sub-032:  AUC 0.190   P 0.021   R 0.033   F1 0.026   (n_preictal 120 / 438)
+    sub-033:  AUC 0.589   P 0.300   R 0.450   F1 0.360   (n_preictal 120 / 480)
+    sub-034:  AUC 0.580   P 0.319   R 0.412   F1 0.360   (n_preictal 3592 / 14314)
+    sub-035:  AUC 0.593   P 0.271   R 0.922   F1 0.418   (n_preictal 2656 / 10324)
+    sub-036:  AUC 0.601   P 0.245   R 0.906   F1 0.386   (n_preictal 360 / 1440)
+    sub-037:  AUC 0.708   P 0.279   R 1.000   F1 0.436   (n_preictal 240 / 960)
+    sub-038:  AUC 0.627   P 0.382   R 1.000   F1 0.553   (n_preictal 120 / 480)
+    sub-039:  AUC 0.661   P 0.300   R 0.817   F1 0.439   (n_preictal 6409 / 25638)
+    sub-040:  AUC 0.434   P 0.236   R 0.717   F1 0.355   (n_preictal 360 / 1440)
+    sub-041:  AUC 0.385   P 0.244   R 0.642   F1 0.354   (n_preictal 240 / 960)
+    sub-042:  AUC 0.720   P 0.378   R 0.873   F1 0.527   (n_preictal 960 / 3840)
+    sub-043:  AUC 0.489   P 0.209   R 0.617   F1 0.312   (n_preictal 600 / 2400)
+    sub-044:  AUC 0.900   P 0.469   R 0.914   F1 0.620   (n_preictal 360 / 1440)
+    sub-045:  AUC 0.397   P 0.191   R 0.650   F1 0.295   (n_preictal 240 / 912)
+    sub-046:  AUC 0.758   P 0.329   R 1.000   F1 0.495   (n_preictal 480 / 1920)
+    sub-047:  AUC 0.417   P 0.262   R 0.928   F1 0.408   (n_preictal 1200 / 4800)
+    sub-048:  AUC 0.656   P 0.270   R 0.842   F1 0.409   (n_preictal 120 / 480)
+    sub-049:  AUC 0.698   P 0.352   R 0.825   F1 0.494   (n_preictal 120 / 480)
+    sub-050:  AUC 0.296   P 0.219   R 0.694   F1 0.333   (n_preictal 360 / 1440)
+    sub-051:  AUC 0.753   P 0.396   R 0.827   F1 0.536   (n_preictal 600 / 2400)
+    sub-052:  AUC 0.515   P 0.250   R 0.785   F1 0.379   (n_preictal 1080 / 4320)
+    sub-053:  AUC 0.255   P 0.219   R 0.738   F1 0.338   (n_preictal 240 / 960)
+    sub-054:  AUC 0.457   P 0.269   R 0.967   F1 0.421   (n_preictal 120 / 480)
+    sub-055:  AUC 0.561   P 0.280   R 0.984   F1 0.436   (n_preictal 374 / 1496)
+    sub-056:  AUC 0.757   P 0.274   R 0.994   F1 0.430   (n_preictal 1441 / 5764)
+    sub-057:  AUC 0.120   P 0.017   R 0.042   F1 0.024   (n_preictal 120 / 480)
+    sub-058:  AUC 0.619   P 0.267   R 1.000   F1 0.421   (n_preictal 120 / 480)
+    sub-059:  AUC 0.608   P 0.265   R 0.927   F1 0.412   (n_preictal 342 / 1368)
+    sub-060:  AUC 0.422   P 0.226   R 0.741   F1 0.347   (n_preictal 2288 / 9150)
+    mean per-subject AUC (subjects with positives): 0.515 ± 0.184  (n=60)
+============================================================

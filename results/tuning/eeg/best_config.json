@@ -1,0 +1,20 @@
+{
+  "config": {
+    "window_sec": 2.0,
+    "notch_hz": 50.0,
+    "step_sec": 1.0,
+    "target_sfreq": 0.0,
+    "interictal_ratio": 5.0,
+    "batch_size": 128,
+    "dropout": 0.0
+  },
+  "auc_roc": 0.5671,
+  "beats_baseline": true,
+  "reaches_target": false,
+  "commands": {
+    "preprocess": "C:\\Users\\lucan\\AppData\\Local\\Programs\\Python\\Python314\\python.exe F:\\Development\\capstone-project\\src\\seizure_prediction_eeg\\preprocess_eeg.py --window-sec 2.0 --step-sec 1.0 --interictal-ratio 5.0 --notch-hz 50.0 --out F:\\Development\\capstone-project\\data\\processed\\eeg_windows.npz",
+    "train": "C:\\Users\\lucan\\AppData\\Local\\Programs\\Python\\Python314\\python.exe F:\\Development\\capstone-project\\src\\seizure_prediction_eeg\\train_model_eeg.py --data F:\\Development\\capstone-project\\data\\processed\\eeg_windows.npz --save-model F:\\Development\\capstone-project\\results\\tuning\\eeg\\current_model.pt --batch-size 128 --dropout 0.0 --epochs 30 --patience 5",
+    "evaluate": "C:\\Users\\lucan\\AppData\\Local\\Programs\\Python\\Python314\\python.exe F:\\Development\\capstone-project\\src\\seizure_prediction_eeg\\evaluate_eeg.py --data F:\\Development\\capstone-project\\data\\processed\\eeg_windows.npz --model F:\\Development\\capstone-project\\results\\tuning\\eeg\\current_model.pt --results-dir F:\\Development\\capstone-project\\results\\tuning\\eeg\\best_run --eval-split val"
+  },
+  "updated": "2026-06-18T06:42:02"
+}
