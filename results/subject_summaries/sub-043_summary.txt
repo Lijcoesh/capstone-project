@@ -1,0 +1,195 @@
+======================================================================
+SUBJECT SUMMARY — sub-043
+Gegenereerd op: 2026-06-19T16:33:59
+======================================================================
+
+Aantal gevonden events.tsv bestanden: 11
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-01_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-02_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-03_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-04_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-05_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-06_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-07_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-08_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-09_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-10_events.tsv
+  - sub-043/ses-01/eeg/sub-043_ses-01_task-szMonitoring_run-11_events.tsv
+
+----------------------------------------------------------------------
+RECORDINGS
+----------------------------------------------------------------------
+  ses-01 run-01: recordingDuration = 12215.0 s (3.39 u)
+  ses-01 run-02: recordingDuration = 50688.0 s (14.08 u)
+  ses-01 run-03: recordingDuration = 12472.0 s (3.46 u)
+  ses-01 run-04: recordingDuration = 16632.0 s (4.62 u)
+  ses-01 run-05: recordingDuration = 54400.0 s (15.11 u)
+  ses-01 run-06: recordingDuration = 6603.0 s (1.83 u)
+  ses-01 run-07: recordingDuration = 6984.0 s (1.94 u)
+  ses-01 run-08: recordingDuration = 60365.0 s (16.77 u)
+  ses-01 run-09: recordingDuration = 23454.0 s (6.51 u)
+  ses-01 run-10: recordingDuration = 60707.0 s (16.86 u)
+  ses-01 run-11: recordingDuration = 11137.0 s (3.09 u)
+  TOTALE opnameduur over alle runs: 315657.00 s (87.68 uur)
+
+----------------------------------------------------------------------
+EVENT TYPES (alle rijen, inclusief achtergrond)
+----------------------------------------------------------------------
+  eventType counts:
+    impd: 6
+    bckg: 5
+    sz_foc_ia: 4
+    sz_foc_ia_m_tonic: 1
+
+----------------------------------------------------------------------
+SEIZURE EVENTS — DETAILS
+----------------------------------------------------------------------
+  Totaal aantal seizure-events: 5
+
+  Duur (seconden):
+    min:    18.00
+    max:    22.00
+    mean:   19.80
+    median: 20.00
+
+  eventType (seizure-rijen):
+    sz_foc_ia: 4
+    sz_foc_ia_m_tonic: 1
+
+  lateralization:
+    un: 4
+    right: 1
+
+  localization:
+    front: 5
+
+  vigilance:
+    awake: 5
+
+  confidence:
+    n/a: 5
+
+  Individuele seizure-events (volledige rij per event):
+    [0] ses-01 run-05
+        onset: 50155.0
+        duration: 20.0
+        eventType: sz_foc_ia
+        lateralization: right
+        localization: front
+        vigilance: awake
+        confidence: nan
+        channels: nan
+        dateTime: 2000-01-01 00:00:00
+        recordingDuration: 54400.0
+    [1] ses-01 run-06
+        onset: 5713.0
+        duration: 18.0
+        eventType: sz_foc_ia
+        lateralization: un
+        localization: front
+        vigilance: awake
+        confidence: nan
+        channels: nan
+        dateTime: 2000-01-01 00:00:00
+        recordingDuration: 6603.0
+    [2] ses-01 run-07
+        onset: 4616.0
+        duration: 18.0
+        eventType: sz_foc_ia_m_tonic
+        lateralization: un
+        localization: front
+        vigilance: awake
+        confidence: nan
+        channels: nan
+        dateTime: 2000-01-01 00:00:00
+        recordingDuration: 6984.0
+    [3] ses-01 run-08
+        onset: 3970.0
+        duration: 22.0
+        eventType: sz_foc_ia
+        lateralization: un
+        localization: front
+        vigilance: awake
+        confidence: nan
+        channels: nan
+        dateTime: 2000-01-01 00:00:00
+        recordingDuration: 60365.0
+    [4] ses-01 run-08
+        onset: 12664.0
+        duration: 21.0
+        eventType: sz_foc_ia
+        lateralization: un
+        localization: front
+        vigilance: awake
+        confidence: nan
+        channels: nan
+        dateTime: 2000-01-01 00:00:00
+        recordingDuration: 60365.0
+
+----------------------------------------------------------------------
+ARTEFACT / TECHNISCHE EVENTS (bv. impedance) — NIET seizure, NIET bckg
+----------------------------------------------------------------------
+  Totaal aantal: 6
+  Duur min/max/mean: -28796.00 / 42330.00 / 2475.83 s
+  WAARSCHUWING: 3 artefact-rij(en) met NEGATIEVE duration — check brondata, dit is fysiek onmogelijk.
+  eventType (artefact-rijen):
+    impd: 6
+
+  LET OP voor je training-pipeline: 'impd' segmenten zijn impedance-checks, geen
+  bruikbaar inter-ictaal signaal. Controleer of deze in je preprocessing apart
+  worden gehouden en niet als 'bckg'/inter-ictaal worden gelabeld.
+
+----------------------------------------------------------------------
+BACKGROUND (INTER-ICTAAL) OVERZICHT
+----------------------------------------------------------------------
+  Aantal bckg-segmenten: 5
+  Totale bckg-duur: 113163.00 s (31.43 uur)
+
+----------------------------------------------------------------------
+KERNGETALLEN
+----------------------------------------------------------------------
+  Seizures per uur opname: 0.0570
+  Aantal runs/sessies: 11
+
+----------------------------------------------------------------------
+PREPROCESSING PIPELINE CHECK (live import van preprocess_common.py)
+----------------------------------------------------------------------
+  PREICTAL_SEC          = 1800  (30.0 min)
+  POSTICTAL_GUARD_SEC   = 600  (10.0 min)
+  DEFAULT_LABEL_MODE    = prediction
+  DEFAULT_WINDOW_SEC    = 2.0
+  DEFAULT_STEP_SEC      = 1.0
+  DEFAULT_INTERICTAL_RATIO = 5.0
+  DEFAULT_NORMALIZE     = per_recording
+  DEFAULT_INPUT_REP     = raw
+
+  Simulatie van window-labeling MET DE ECHTE PIPELINE-FUNCTIES
+  (window_sec/step_sec = de DEFAULT_* hierboven; als je build_dataset
+   met andere waarden aanroept, wijkt dit af van je echte run):
+  sub-043_ses-01_task-szMonitoring_run-01_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+  sub-043_ses-01_task-szMonitoring_run-02_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+  sub-043_ses-01_task-szMonitoring_run-03_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+  sub-043_ses-01_task-szMonitoring_run-04_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+  sub-043_ses-01_task-szMonitoring_run-05_events.tsv:
+      sz-events (via parse_seizure_events): 1
+      windows -> positive=1800  interictal=51978  excluded=621
+  sub-043_ses-01_task-szMonitoring_run-06_events.tsv:
+      sz-events (via parse_seizure_events): 1
+      windows -> positive=1800  interictal=4183  excluded=619
+  sub-043_ses-01_task-szMonitoring_run-07_events.tsv:
+      sz-events (via parse_seizure_events): 1
+      windows -> positive=1800  interictal=4564  excluded=619
+  sub-043_ses-01_task-szMonitoring_run-08_events.tsv:
+      sz-events (via parse_seizure_events): 2
+      windows -> positive=3600  interictal=55519  excluded=1245
+  sub-043_ses-01_task-szMonitoring_run-09_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+  sub-043_ses-01_task-szMonitoring_run-10_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+  sub-043_ses-01_task-szMonitoring_run-11_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+
+  TOTAAL over alle runs: positive=9000  interictal=116244  excluded=3104
+  Effectieve interictal:positive ratio vóór subsampling: 12.92 : 1
+  Na subsampling naar DEFAULT_INTERICTAL_RATIO=5.0: 45000 interictal windows zouden behouden blijven (van de 116244 beschikbare).
+
+======================================================================
+EINDE SAMENVATTING
+======================================================================

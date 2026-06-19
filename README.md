@@ -6,7 +6,7 @@ sets are compared under identical conditions: an **EEG-only** model (2 channels)
 **EEG + ECG** model (3 channels). Because both models use the same dataset, the only
 difference is the ECG channel — a controlled comparison of whether ECG adds predictive value.
 
-**Task.** Seizure *prediction* (not detection): each signal window is labeled **pre-ictal**
+**Task:** Seizure *prediction* (not detection): each signal window is labeled **pre-ictal**
 (within 10 min before a seizure onset → positive) or **interictal** (far from any seizure →
 negative). The seizure itself and a post-ictal guard are excluded from training.
 
