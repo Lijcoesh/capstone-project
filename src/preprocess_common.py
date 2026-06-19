@@ -38,7 +38,7 @@ SEIZEIT2_BASE = Path(__file__).resolve().parent / "../data/raw/seizeit2"
 # mains frequency is 50 Hz (NOT 60 Hz like the US-recorded CHB-MIT).
 SEIZEIT2_NOTCH_HZ = 50.0
 
-PREICTAL_SEC = 10 * 60          # 10 min before onset = pre-ictal (positive)
+PREICTAL_SEC = 30 * 60          # 10 min before onset = pre-ictal (positive)
 POSTICTAL_GUARD_SEC = 10 * 60   # exclude the seizure + 10 min after it
 
 DEFAULT_INTERICTAL_RATIO = 5.0  # interictal : pre-ictal windows kept
