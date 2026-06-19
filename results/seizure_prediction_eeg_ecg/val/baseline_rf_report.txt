@@ -1,34 +1,34 @@
 ==========================================================
   RandomForest BASELINE   feature_set=eeg_ecg
-  split=VAL   n_eval=42,153   pre-ictal=7,127
+  split=VAL   n_eval=212,676   pre-ictal=35,953
 ==========================================================
-  AUC-ROC                : 0.620   (0.50 = chance)
-  AUC-PR                 : 0.336   (baseline 0.169)
-  mean per-subject AUC   : 0.718 +/- 0.226   (n=56)
-  mean per-subj AUC (sm) : 0.756   (best smoothing 120s)
-  Precision/Recall/F1    : 0.567 / 0.186 / 0.280   (@ thr 0.55, train-tuned (best F1 on TRAIN))
-  Confusion [tn fp fn tp]: [34011 1015 5799 1328]
-  @ thr 0.50 (CNN default): P 0.532 / R 0.208 / F1 0.299  [33718 1308 5643 1484]
+  AUC-ROC                : 0.640   (0.50 = chance)
+  AUC-PR                 : 0.302   (baseline 0.169)
+  mean per-subject AUC   : 0.715 +/- 0.158   (n=56)
+  mean per-subj AUC (sm) : 0.801   (best smoothing 120s)
+  Precision/Recall/F1    : 0.466 / 0.167 / 0.245   (@ thr 0.55, train-tuned (best F1 on TRAIN))
+  Confusion [tn fp fn tp]: [169846 6877 29960 5993]
+  @ thr 0.50 (CNN default): P 0.423 / R 0.200 / F1 0.272  [166901 9822 28756 7197]
 
-  Prob pre-ictal  mean/median: 0.288 / 0.170
-  Prob interictal mean/median: 0.158 / 0.120
+  Prob pre-ictal  mean/median: 0.328 / 0.273
+  Prob interictal mean/median: 0.226 / 0.200
 
   Threshold sweep (P / R / F1):
-    thr 0.10:  P 0.191   R 0.698   F1 0.300
-    thr 0.15:  P 0.222   R 0.550   F1 0.317
-    thr 0.20:  P 0.265   R 0.436   F1 0.330
-    thr 0.30:  P 0.360   R 0.317   F1 0.337
-    thr 0.40:  P 0.442   R 0.252   F1 0.321
-    thr 0.50:  P 0.532   R 0.208   F1 0.299
-    thr 0.60:  P 0.601   R 0.172   F1 0.267
+    thr 0.10:  P 0.181   R 0.889   F1 0.301
+    thr 0.15:  P 0.196   R 0.804   F1 0.316
+    thr 0.20:  P 0.217   R 0.693   F1 0.330
+    thr 0.30:  P 0.271   R 0.438   F1 0.335
+    thr 0.40:  P 0.343   R 0.284   F1 0.311
+    thr 0.50:  P 0.423   R 0.200   F1 0.272
+    thr 0.60:  P 0.493   R 0.138   F1 0.216
 
   Top band-power features (RF importance):
-    ECG SD_delta       0.081
-    ECG SD_alpha       0.077
-    ECG SD_gamma       0.075
-    ECG SD_beta        0.075
-    ECG SD_theta       0.073
-    CROSStop SD_gamma  0.066
-    BTEleft SD_beta    0.066
-    BTEleft SD_gamma   0.065
+    ECG SD_beta        0.087
+    ECG SD_delta       0.086
+    ECG SD_gamma       0.083
+    ECG SD_theta       0.080
+    ECG SD_alpha       0.079
+    CROSStop SD_gamma  0.074
+    BTEleft SD_gamma   0.066
+    BTEleft SD_beta    0.063
 ==========================================================
