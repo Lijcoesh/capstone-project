@@ -9,6 +9,7 @@ train_model_*.py wrappers only set the dataset/model paths and call run_training
 
 import argparse
 import copy
+import os
 from pathlib import Path
 
 import numpy as np
@@ -26,24 +27,34 @@ from preprocess_common import load_preprocessed, subject_aware_split
 class SeizureCNN(nn.Module):
     def __init__(self, n_channels: int, n_timepoints: int) -> None:
         super().__init__()
+        # Guard: after two MaxPool1d(4) the sequence is n_timepoints//16.
+        # AdaptiveAvgPool1d(8) requires at least 1 element going in.
+        min_len = n_timepoints // 16
+        if min_len < 1:
+            raise ValueError(
+                f"n_timepoints={n_timepoints} is too short for two MaxPool1d(4) layers "
+                f"(minimum required: 16)."
+            )
+
         self.conv_block = nn.Sequential(
-            nn.Conv1d(n_channels, 32, kernel_size=15, padding=7),
+            # bias=False: BatchNorm subtracts the channel mean, making conv bias a no-op.
+            nn.Conv1d(n_channels, 32, kernel_size=15, padding=7, bias=False),
             nn.BatchNorm1d(32),
             nn.ELU(),
             nn.MaxPool1d(4),
-            nn.Dropout(0.25),
+            nn.Dropout1d(0.25),   # zeros full channels, correct for 1-D conv
 
-            nn.Conv1d(32, 64, kernel_size=9, padding=4),
+            nn.Conv1d(32, 64, kernel_size=9, padding=4, bias=False),
             nn.BatchNorm1d(64),
             nn.ELU(),
             nn.MaxPool1d(4),
-            nn.Dropout(0.25),
+            nn.Dropout1d(0.25),
 
-            nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.Conv1d(64, 128, kernel_size=5, padding=2, bias=False),
             nn.BatchNorm1d(128),
             nn.ELU(),
             nn.AdaptiveAvgPool1d(8),
-            nn.Dropout(0.25),
+            nn.Dropout1d(0.25),
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -58,27 +69,22 @@ class SeizureCNN(nn.Module):
 
 
 class BandPowerSeqCNN(nn.Module):
-    """1-D CNN over a band-power sequence: input (channels*bands, n_frames).
-
-    Lighter than SeizureCNN (small kernels, no aggressive pooling) because the input
-    is a short feature sequence (~tens of frames), not a long raw waveform. It convolves
-    over time so it can pick up how the spectral content evolves toward onset — the
-    temporal dynamics a per-window RandomForest averages away.
-    """
-
     def __init__(self, n_features: int, n_frames: int) -> None:
         super().__init__()
+        if n_frames < 1:
+            raise ValueError(f"n_frames={n_frames} must be >= 1.")
+
         self.conv_block = nn.Sequential(
-            nn.Conv1d(n_features, 64, kernel_size=5, padding=2),
+            nn.Conv1d(n_features, 64, kernel_size=5, padding=2, bias=False),
             nn.BatchNorm1d(64),
             nn.ELU(),
-            nn.Dropout(0.3),
+            nn.Dropout1d(0.3),
 
-            nn.Conv1d(64, 64, kernel_size=3, padding=1),
+            nn.Conv1d(64, 64, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm1d(64),
             nn.ELU(),
             nn.AdaptiveAvgPool1d(8),
-            nn.Dropout(0.3),
+            nn.Dropout1d(0.3),
         )
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -105,26 +111,46 @@ def pick_device(no_gpu: bool) -> torch.device:
     if not no_gpu and torch.cuda.is_available():
         device = torch.device("cuda")
         print(f"[GPU] Using CUDA device: {torch.cuda.get_device_name(0)}")
+        # cuDNN autotuning: our conv shapes are fixed across the whole run
+        # (same n_channels/n_timepoints/batch_size every batch), so letting
+        # cuDNN benchmark a few algorithms once and cache the fastest one is
+        # pure upside here. Would be harmful only with variable input shapes.
+        torch.backends.cudnn.benchmark = True
+        # TF32 matmuls/convs on Ampere+ (RTX 30xx/40xx, A100, etc.): ~free
+        # throughput gain, accuracy impact is negligible for this kind of
+        # classifier. Safe default; disable by exporting
+        # NVIDIA_TF32_OVERRIDE=0 if you ever need bit-exact fp32.
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
     elif not no_gpu and torch.backends.mps.is_available():
         device = torch.device("mps")
         print("[GPU] Using Apple MPS device.")
     else:
         device = torch.device("cpu")
         print("[CPU] No GPU found (or --no-gpu set); training on CPU.")
+        # Let PyTorch use all available CPU cores for intra-op parallelism.
+        n_cpu = os.cpu_count() or 1
+        torch.set_num_threads(n_cpu)
+        print(f"[CPU] torch.set_num_threads({n_cpu})")
     return device
 
 
 # ── Training ──────────────────────────────────────────────────────────────────
 
 @torch.no_grad()
-def _val_positive_prob(model: SeizureCNN, x: np.ndarray, device: torch.device,
+def _val_positive_prob(model: nn.Module, x: torch.Tensor, device: torch.device,
                        batch_size: int, amp_on: bool) -> np.ndarray:
-    """p(pre-ictal) over a held-out array, batched (keeps VRAM low; x stays on CPU)."""
+    """p(pre-ictal) over a held-out array, batched (keeps VRAM low unless x is
+    already resident on `device`, in which case there's nothing to copy)."""
+    device_type = device.type if device.type in ("cuda", "cpu") else "cpu"
+    on_device = x.device == device
     model.eval()
     probs = []
     for i in range(0, len(x), batch_size):
-        xb = torch.from_numpy(x[i:i + batch_size]).to(device)
-        with torch.amp.autocast("cuda", enabled=amp_on):
+        xb = x[i:i + batch_size]
+        if not on_device:
+            xb = xb.to(device, non_blocking=True)
+        with torch.amp.autocast(device_type, enabled=amp_on):
             out = model(xb)
         probs.append(torch.softmax(out.float(), dim=1)[:, 1].cpu().numpy())
     model.train()
@@ -144,12 +170,20 @@ def train_model(
         patience: int = 5,
         use_amp: bool = True,
         input_rep: str = "raw",
+        num_workers: int = 0,
+        gpu_resident: bool = False,
+        compile_model: bool = False,
 ) -> nn.Module:
     torch.manual_seed(random_state)
     np.random.seed(random_state)
 
     n_channels, n_timepoints = x_train.shape[1], x_train.shape[2]
     model = build_model(input_rep, n_channels, n_timepoints).to(device)
+    if compile_model:
+        # torch.compile traces the model into fused kernels; biggest win on
+        # CUDA, small/no-op elsewhere. First batch of each run pays a one-time
+        # compile cost, so this helps most when epochs/ensemble-runs are large.
+        model = torch.compile(model)
 
     # Class imbalance: weight the positive (pre-ictal) class by how much rarer it is.
     n_neg = int((y_train == 0).sum())
@@ -160,15 +194,37 @@ def train_model(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     # Mixed precision ~2x on CUDA; silently a no-op on CPU/MPS.
+    device_type = device.type if device.type in ("cuda", "cpu") else "cpu"
     amp_on = bool(use_amp) and device.type == "cuda"
-    scaler = torch.amp.GradScaler("cuda", enabled=amp_on)
+    scaler = torch.amp.GradScaler(device_type, enabled=amp_on)
 
-    # Keep the full training set in CPU RAM and move only each batch to the GPU.
-    # Moving the whole set with .to(device) OOMs on small cards (e.g. 4 GB laptop
-    # GPUs) once the cohort is large; per-batch transfer is a tiny PCIe copy.
-    pin = device.type == "cuda"
-    dl = DataLoader(TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train)),
-                    batch_size=batch_size, shuffle=True, pin_memory=pin)
+    pin = device.type == "cuda" and not gpu_resident
+
+    if gpu_resident:
+        # Opt-in: park the whole training set on the GPU once and slice it
+        # batch-by-batch with zero PCIe transfer per step. Only worth it if
+        # x_train comfortably fits in VRAM alongside the model/activations —
+        # if you OOM, drop --gpu-resident and go back to per-batch transfer.
+        x_train_t = torch.from_numpy(x_train).to(device)
+        y_train_t = torch.from_numpy(y_train).to(device)
+        dl = DataLoader(TensorDataset(x_train_t, y_train_t),
+                        batch_size=batch_size, shuffle=True,
+                        num_workers=0)  # CUDA tensors can't cross process workers
+        if x_val is not None:
+            x_val = torch.from_numpy(x_val).to(device)
+    else:
+        # Keep the full training set in CPU RAM and move only each batch to the GPU.
+        # Moving the whole set with .to(device) OOMs on small cards (e.g. 4 GB laptop
+        # GPUs) once the cohort is large; per-batch transfer is a tiny PCIe copy.
+        dl = DataLoader(
+            TensorDataset(torch.from_numpy(x_train), torch.from_numpy(y_train)),
+            batch_size=batch_size, shuffle=True, pin_memory=pin,
+            num_workers=num_workers,
+            persistent_workers=num_workers > 0,
+            prefetch_factor=4 if num_workers > 0 else None,
+        )
+        if x_val is not None:
+            x_val = torch.from_numpy(x_val)
 
     # Early stopping on validation AUC (ranking quality, the metric we report). The
     # model underfits more than it overfits here, so this mostly saves time: it stops
@@ -183,10 +239,11 @@ def train_model(
         total_loss = 0.0
         batch_bar = tqdm(dl, desc=f"  Epoch {epoch:3d}", unit="batch", leave=False)
         for xb, yb in batch_bar:
-            xb = xb.to(device, non_blocking=pin)
-            yb = yb.to(device, non_blocking=pin)
+            if not gpu_resident:
+                xb = xb.to(device, non_blocking=pin)
+                yb = yb.to(device, non_blocking=pin)
             optimizer.zero_grad(set_to_none=True)
-            with torch.amp.autocast("cuda", enabled=amp_on):
+            with torch.amp.autocast(device_type, enabled=amp_on):
                 loss = criterion(model(xb), yb)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -219,11 +276,17 @@ def train_model(
     return model
 
 
-def save_models(models: list[SeizureCNN], path: Path, meta: dict) -> None:
+def save_models(models: list[nn.Module], path: Path, meta: dict) -> None:
     """Save one or more trained models (ensemble) in a single checkpoint."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"state_dicts": [m.state_dict() for m in models], "meta": meta}, path)
+    # torch.compile wraps the model in an OptimizedModule; unwrap to save the
+    # plain state_dict so checkpoints load fine even without compile later.
+    state_dicts = []
+    for m in models:
+        inner = getattr(m, "_orig_mod", m)
+        state_dicts.append(inner.state_dict())
+    torch.save({"state_dicts": state_dicts, "meta": meta}, path)
     print(f"[Model] Saved {len(models)} model(s) to {path}")
 
 
@@ -241,22 +304,35 @@ def add_training_args(parser: argparse.ArgumentParser, default_data: Path, defau
     parser.add_argument("--train-subjects", type=str, default=None,
                         help="Comma-separated subject IDs to use for training, e.g. "
                              "'sub-001,sub-002,...,sub-016'. Overrides --train-frac.")
-    parser.add_argument("--epochs", type=int, default=30,
+    parser.add_argument("--epochs", type=int, default=50,
                         help="Max epochs; early stopping usually halts well before this.")
-    parser.add_argument("--patience", type=int, default=5,
+    parser.add_argument("--patience", type=int, default=10,
                         help="Early-stop after this many epochs without val-AUC improvement "
                              "(default 5). Ignored when there is no validation set.")
-    parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--no-amp", action="store_true",
                         help="Disable CUDA mixed-precision (AMP). AMP is ~2x faster and on "
                              "by default; use this only to rule it out as a cause of issues.")
     parser.add_argument("--no-gpu", action="store_true")
     parser.add_argument("--random-state", type=int, default=42)
-    parser.add_argument("--ensemble-runs", type=int, default=1,
+    parser.add_argument("--ensemble-runs", type=int, default=5,
                         help="Train N independent models; evaluation averages their "
                              "class probabilities (soft voting). Default 1 = no ensemble.")
     parser.add_argument("--save-model", type=Path, default=default_model)
+    parser.add_argument("--num-workers", type=int, default=min(4, os.cpu_count() or 1),
+                        help="DataLoader worker processes for batch prep (default: "
+                             "min(4, cpu_count)). Set 0 to disable. Ignored with "
+                             "--gpu-resident. Mainly helps when batch_size is large "
+                             "enough that collation, not the GPU, is the bottleneck.")
+    parser.add_argument("--gpu-resident", action="store_true",
+                        help="Keep the entire training set on the GPU (no per-batch "
+                             "host->device copy). Only use this if x_train fits in "
+                             "VRAM alongside the model; otherwise you'll OOM.")
+    parser.add_argument("--compile", dest="compile_model", action="store_true",
+                        help="Wrap the model with torch.compile for fused kernels. "
+                             "Adds one-time compile overhead per run; most worthwhile "
+                             "with --ensemble-runs > 1 or large --epochs.")
 
 
 def run_training(args: argparse.Namespace) -> None:
@@ -297,6 +373,10 @@ def run_training(args: argparse.Namespace) -> None:
               f"train={len(x_train):,} windows ({int(y_train.sum()):,} pre-ictal), "
               f"val={len(val_idx):,}")
 
+    if args.gpu_resident and device.type != "cuda":
+        print("[Warn] --gpu-resident requested but device is not CUDA; ignoring.")
+    gpu_resident = args.gpu_resident and device.type == "cuda"
+
     n_runs = max(1, args.ensemble_runs)
     models: list[nn.Module] = []
     for run in range(n_runs):
@@ -309,6 +389,9 @@ def run_training(args: argparse.Namespace) -> None:
             x_val=x_val, y_val=y_val,
             patience=args.patience, use_amp=not args.no_amp,
             input_rep=input_rep,
+            num_workers=args.num_workers,
+            gpu_resident=gpu_resident,
+            compile_model=args.compile_model,
         ))
 
     meta = {
