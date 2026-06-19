@@ -1,0 +1,131 @@
+======================================================================
+SUBJECT SUMMARY — sub-016
+Gegenereerd op: 2026-06-19T16:34:02
+======================================================================
+
+Aantal gevonden events.tsv bestanden: 3
+  - sub-016/ses-01/eeg/sub-016_ses-01_task-szMonitoring_run-01_events.tsv
+  - sub-016/ses-01/eeg/sub-016_ses-01_task-szMonitoring_run-02_events.tsv
+  - sub-016/ses-01/eeg/sub-016_ses-01_task-szMonitoring_run-03_events.tsv
+
+----------------------------------------------------------------------
+RECORDINGS
+----------------------------------------------------------------------
+  ses-01 run-01: recordingDuration = 74586.0 s (20.72 u)
+  ses-01 run-02: recordingDuration = 14613.0 s (4.06 u)
+  ses-01 run-03: recordingDuration = 83552.0 s (23.21 u)
+  TOTALE opnameduur over alle runs: 172751.00 s (47.99 uur)
+
+----------------------------------------------------------------------
+EVENT TYPES (alle rijen, inclusief achtergrond)
+----------------------------------------------------------------------
+  eventType counts:
+    impd: 10
+    sz_foc_ua_nm: 1
+    sz_foc_f2b: 1
+
+----------------------------------------------------------------------
+SEIZURE EVENTS — DETAILS
+----------------------------------------------------------------------
+  Totaal aantal seizure-events: 2
+
+  Duur (seconden):
+    min:    230.00
+    max:    301.00
+    mean:   265.50
+    median: 265.50
+
+  eventType (seizure-rijen):
+    sz_foc_ua_nm: 1
+    sz_foc_f2b: 1
+
+  lateralization:
+    right: 1
+    left: 1
+
+  localization:
+    temp: 2
+
+  vigilance:
+    awake: 2
+
+  confidence:
+    n/a: 2
+
+  Individuele seizure-events (volledige rij per event):
+    [0] ses-01 run-02
+        onset: 12491.0
+        duration: 230.0
+        eventType: sz_foc_ua_nm
+        lateralization: right
+        localization: temp
+        vigilance: awake
+        confidence: nan
+        channels: nan
+        dateTime: 2000-01-01 00:00:00
+        recordingDuration: 14613.0
+    [1] ses-01 run-03
+        onset: 3076.0
+        duration: 301.0
+        eventType: sz_foc_f2b
+        lateralization: left
+        localization: temp
+        vigilance: awake
+        confidence: nan
+        channels: nan
+        dateTime: 2000-01-01 00:00:00
+        recordingDuration: 83552.0
+
+----------------------------------------------------------------------
+ARTEFACT / TECHNISCHE EVENTS (bv. impedance) — NIET seizure, NIET bckg
+----------------------------------------------------------------------
+  Totaal aantal: 10
+  Duur min/max/mean: 9.00 / 33.00 / 13.80 s
+  eventType (artefact-rijen):
+    impd: 10
+
+  LET OP voor je training-pipeline: 'impd' segmenten zijn impedance-checks, geen
+  bruikbaar inter-ictaal signaal. Controleer of deze in je preprocessing apart
+  worden gehouden en niet als 'bckg'/inter-ictaal worden gelabeld.
+
+----------------------------------------------------------------------
+BACKGROUND (INTER-ICTAAL) OVERZICHT
+----------------------------------------------------------------------
+  Geen bckg-segmenten gevonden.
+
+----------------------------------------------------------------------
+KERNGETALLEN
+----------------------------------------------------------------------
+  Seizures per uur opname: 0.0417
+  Aantal runs/sessies: 3
+
+----------------------------------------------------------------------
+PREPROCESSING PIPELINE CHECK (live import van preprocess_common.py)
+----------------------------------------------------------------------
+  PREICTAL_SEC          = 1800  (30.0 min)
+  POSTICTAL_GUARD_SEC   = 600  (10.0 min)
+  DEFAULT_LABEL_MODE    = prediction
+  DEFAULT_WINDOW_SEC    = 2.0
+  DEFAULT_STEP_SEC      = 1.0
+  DEFAULT_INTERICTAL_RATIO = 5.0
+  DEFAULT_NORMALIZE     = per_recording
+  DEFAULT_INPUT_REP     = raw
+
+  Simulatie van window-labeling MET DE ECHTE PIPELINE-FUNCTIES
+  (window_sec/step_sec = de DEFAULT_* hierboven; als je build_dataset
+   met andere waarden aanroept, wijkt dit af van je echte run):
+  sub-016_ses-01_task-szMonitoring_run-01_events.tsv: 0 sz-event(en) via parse_seizure_events, geen simulatie (geen seizures of onbekende recordingDuration)
+  sub-016_ses-01_task-szMonitoring_run-02_events.tsv:
+      sz-events (via parse_seizure_events): 1
+      windows -> positive=1800  interictal=11981  excluded=831
+  sub-016_ses-01_task-szMonitoring_run-03_events.tsv:
+      sz-events (via parse_seizure_events): 1
+      windows -> positive=1800  interictal=80849  excluded=902
+
+  TOTAAL over alle runs: positive=3600  interictal=92830  excluded=1733
+  Effectieve interictal:positive ratio vóór subsampling: 25.79 : 1
+  Na subsampling naar DEFAULT_INTERICTAL_RATIO=5.0: 18000 interictal windows zouden behouden blijven (van de 92830 beschikbare).
+
+======================================================================
+EINDE SAMENVATTING
+======================================================================
