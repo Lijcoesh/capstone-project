@@ -24,8 +24,10 @@ capstone-project/                # repo root
 │   ├── baseline_rf.py            # RandomForest band-power baseline (comparison reference)
 │   ├── seizure_prediction_eeg/       # EEG-only pipeline (preprocess → train → evaluate)
 │   └── seizure_prediction_eeg_ecg/   # EEG + ECG pipeline (same scripts, +ECG channel)
-├── models/          # saved model checkpoints, per pipeline
-├── results/         # metrics.csv, per_subject.csv, reports/, plots, per pipeline
+├── models/          # cnn_prediction_eeg.pt / cnn_prediction_eeg_ecg.pt (5-run ensemble)
+├── results/         # seizure_prediction_eeg/, seizure_prediction_eeg_ecg/
+├── archive/         # experimental runs + per-seed checkpoints + legacy scripts
+├── notebooks/       # results_analysis.ipynb, eda.ipynb
 ├── notebooks/       # results_analysis.ipynb — EEG vs EEG+ECG comparison figure
 ├── docs/            # experiment_log.md — full record of decisions and runs
 ├── requirements.txt
@@ -77,7 +79,9 @@ Reads the SeizeIT2 recordings and caches a single array (run once; train as ofte
 like). Steps:
 
 - **Power-line noise removal** — 50 Hz notch + harmonics (European mains).
-- **Sliding-window segmentation** — 2 s windows, 1 s step (512 timepoints at 256 Hz).
+- **Sliding-window segmentation** — 50 s windows, 5 s step (final config).
+- **Band-power sequence** (`--input-rep bandpower_seq`): log band-power per EEG/ECG channel in
+  short frames across each window — the CNN input for the final model (not raw waveforms).
 - **Per-recording, per-channel z-score normalization** (`--normalize`, default `per_recording`):
   one mean/std per channel over the whole recording, which keeps the cross-window amplitude
   dynamics that carry pre-ictal information (`per_window` is also available).
@@ -111,22 +115,29 @@ per-patient probability scales). Outputs to `results/seizure_prediction_*/`:
 `metrics.csv` (one row per run), `per_subject.csv`, a timestamped report under `reports/`, an
 average pre-ictal window plot, and a **Grad-CAM** figure.
 
+- **Optional ensemble** (`--ensemble-runs 5`): trains five independently initialized
+  models (seeds `random_state` … `random_state+4`); evaluation averages their class
+  probabilities (soft voting) before thresholding — this is the final reported CNN.
+
 ## Usage
 
 ```bash
 # EEG-only (from src/seizure_prediction_eeg)
-python preprocess_eeg.py      # -> data/processed/eeg_windows.npz (run once)
-python train_model_eeg.py     # subject-aware 60/20/20 split; default 30 epochs
-python evaluate_eeg.py        # -> metrics.csv, per_subject.csv, reports/, plots
+python preprocess_eeg.py --window-sec 50 --step-sec 5 --preictal-min 10 \
+  --require-ecg --input-rep bandpower_seq
+python train_model_eeg.py --ensemble-runs 5 --random-state 42 --epochs 50 --patience 8
+python evaluate_eeg.py --eval-split val    # tune / monitor
+python evaluate_eeg.py --eval-split test   # final held-out report
 
 # EEG + ECG (from src/seizure_prediction_eeg_ecg)
-python preprocess_eeg_ecg.py
-python train_model_eeg_ecg.py
-python evaluate_eeg_ecg.py
+python preprocess_eeg_ecg.py --window-sec 50 --step-sec 5 --preictal-min 10 \
+  --input-rep bandpower_seq
+python train_model_eeg_ecg.py --ensemble-runs 5 --random-state 42 --epochs 50 --patience 8
+python evaluate_eeg_ecg.py --eval-split test
 
-# RandomForest baseline (from repo root; uses the same windows + split as the CNN)
-python src/baseline_rf.py --data data/processed/eeg_windows.npz --feature-set eeg
-python src/baseline_rf.py --data data/processed/eeg_ecg_windows.npz --feature-set eeg_ecg
+# RandomForest baseline (repo root; train + evaluate in one script)
+python src/baseline_rf.py --data data/processed/eeg_windows.npz --feature-set eeg --eval-split test
+python src/baseline_rf.py --data data/processed/eeg_ecg_windows.npz --feature-set eeg_ecg --eval-split test
 ```
 
 Every script accepts `--help` for its options. For a robust comparison, repeat

@@ -1,0 +1,2 @@
+timestamp,feature_set,eval_split,train_frac,val_frac,epochs,random_state,n_runs,interictal_ratio,preictal_sec,normalize,pred_threshold,pred_min_run,precision,recall,f1,accuracy,balanced_acc,auc_roc,auc_pr,mean_subj_auc,smooth_sec,auc_roc_smooth,mean_subj_auc_smooth,train_f1,tn,fp,fn,tp,n_test,n_test_preictal,model_path
+2026-06-15T18:30:02,eeg_ecg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.2371,0.5646,0.334,0.6193,0.5975,0.6102,0.2426,0.5988,120,0.6299,0.6325,0.4433,111415,65308,15654,20299,212676,35953,models/seizure_prediction_eeg_ecg/cnn_prediction_eeg_ecg.pt

@@ -1,0 +1,4 @@
+timestamp,feature_set,eval_split,train_frac,val_frac,epochs,random_state,n_runs,interictal_ratio,preictal_sec,normalize,pred_threshold,pred_min_run,precision,recall,f1,accuracy,balanced_acc,auc_roc,auc_pr,mean_subj_auc,smooth_sec,auc_roc_smooth,mean_subj_auc_smooth,train_f1,tn,fp,fn,tp,n_test,n_test_preictal,model_path
+2026-06-17T21:57:42,eeg_ecg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.2553,1.0,0.4068,0.5139,0.7083,0.7826,0.2906,0.7826,120,0.9366,0.9366,0.7852,100,140,0,48,288,48,models/per_patient/cnn_ecg_sub-007.pt
+2026-06-17T22:03:24,eeg_ecg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.1752,1.0,0.2981,0.2153,0.5292,0.8641,0.5678,0.8641,120,0.8911,0.8911,0.448,98,1582,0,336,2016,336,models/per_patient/cnn_ecg_sub-002.pt
+2026-06-17T22:07:44,eeg_ecg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.2672,0.8287,0.4041,0.5829,0.6805,0.6578,0.2145,0.6578,60,0.7093,0.7093,0.5436,559,491,37,179,1266,216,models/per_patient/cnn_ecg_sub-015.pt

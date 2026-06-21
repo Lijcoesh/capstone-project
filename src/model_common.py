@@ -309,7 +309,7 @@ def add_training_args(parser: argparse.ArgumentParser, default_data: Path, defau
     parser.add_argument("--patience", type=int, default=10,
                         help="Early-stop after this many epochs without val-AUC improvement "
                              "(default 5). Ignored when there is no validation set.")
-    parser.add_argument("--batch-size", type=int, default=1024)
+    parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--no-amp", action="store_true",
                         help="Disable CUDA mixed-precision (AMP). AMP is ~2x faster and on "

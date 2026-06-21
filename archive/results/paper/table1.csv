@@ -1,0 +1,9 @@
+feature_set,split,model,mean,std,n_seeds
+EEG,val,cnn,0.5893,0.0305,5
+EEG,val,rf,0.7268,0.0018,5
+EEG,test,cnn,0.5705,0.0126,5
+EEG,test,rf,0.5704,0.007,5
+EEG+ECG,val,cnn,0.565,0.0215,5
+EEG+ECG,val,rf,0.7557,0.0044,5
+EEG+ECG,test,cnn,0.5231,0.0095,5
+EEG+ECG,test,rf,0.5918,0.0049,5

@@ -1,0 +1,6 @@
+timestamp,model,feature_set,auc_roc,auc_pr,mean_subj_auc,mean_subj_auc_smooth,precision,recall,f1,tn,fp,fn,tp,n_test,n_estimators,random_state
+2026-06-18T00:14:34,randomforest_bandpower,eeg_ecg,0.642,0.3861,0.7024,0.7502,0.5907,0.1574,0.2486,4163,106,819,153,5241,300,42
+2026-06-18T00:14:50,randomforest_bandpower,eeg_ecg,0.6377,0.3722,0.6963,0.7387,0.5498,0.1533,0.2397,4147,122,823,149,5241,300,43
+2026-06-18T00:15:06,randomforest_bandpower,eeg_ecg,0.6409,0.3795,0.6954,0.7361,0.5852,0.1626,0.2544,4157,112,814,158,5241,300,44
+2026-06-18T00:15:23,randomforest_bandpower,eeg_ecg,0.6355,0.3749,0.6909,0.7194,0.5692,0.1481,0.2351,4160,109,828,144,5241,300,45
+2026-06-18T00:15:39,randomforest_bandpower,eeg_ecg,0.6422,0.3772,0.7029,0.7349,0.5868,0.1461,0.2339,4169,100,830,142,5241,300,46
