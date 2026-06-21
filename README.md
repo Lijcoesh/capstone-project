@@ -5,6 +5,8 @@ A 1-D Convolutional Neural Network is trained on the **SeizeIT2** dataset, and t
 sets are compared under identical conditions: an **EEG-only** model (2 channels) and an
 **EEG + ECG** model (3 channels). Because both models use the same dataset, the only
 difference is the ECG channel — a controlled comparison of whether ECG adds predictive value.
+The **EEG-only model is the baseline** the EEG + ECG model has to beat: it is the strongest
+single-modality reference, so beating it is what would justify adding the ECG channel.
 
 **Task:** Seizure *prediction* (not detection): each signal window is labeled **pre-ictal**
 (within 10 min before a seizure onset → positive) or **interictal** (far from any seizure →
@@ -21,29 +23,47 @@ capstone-project/                # repo root
 │   ├── preprocess_common.py      # shared: BIDS discovery, pre-ictal labeling, windowing, 50 Hz notch, split
 │   ├── model_common.py           # shared: 1-D CNN + training
 │   ├── evaluate_common.py        # shared: metrics, per-subject AUC, Grad-CAM, report
-│   ├── baseline_rf.py            # RandomForest band-power baseline (comparison reference)
-│   ├── seizure_prediction_eeg/       # EEG-only pipeline (preprocess → train → evaluate)
+│   ├── seizure_prediction_eeg/       # EEG-only pipeline = baseline (preprocess → train → evaluate)
 │   └── seizure_prediction_eeg_ecg/   # EEG + ECG pipeline (same scripts, +ECG channel)
 ├── models/          # cnn_prediction_eeg.pt / cnn_prediction_eeg_ecg.pt (5-run ensemble)
-├── results/         # seizure_prediction_eeg/, seizure_prediction_eeg_ecg/
-├── archive/         # experimental runs + per-seed checkpoints + legacy scripts
-├── notebooks/       # results_analysis.ipynb, eda.ipynb
-├── notebooks/       # results_analysis.ipynb — EEG vs EEG+ECG comparison figure
-├── docs/            # experiment_log.md — full record of decisions and runs
+├── results/         # seizure_prediction_eeg/, seizure_prediction_eeg_ecg/, comparison/
+├── archive/         # experimental runs, per-seed checkpoints, retired RandomForest baseline
+├── notebooks/       # eda.ipynb, results_analysis.ipynb (EEG vs EEG+ECG comparison)
 ├── requirements.txt
 └── README.md
 ```
 
 ## Installation & Setup
 
-Install the Python dependencies:
+Create and activate a virtual environment, then install the dependencies into it. Using a
+venv keeps one canonical interpreter for the project, so the scripts and the notebooks all
+share the same packages (this avoids the common "works in the terminal but the notebook says
+`ModuleNotFoundError: No module named 'mne'`" problem on machines with several Python installs).
 
 ```bash
+# from the repo root
+python -m venv .venv
+
+# activate it
+source .venv/bin/activate        # macOS / Linux
+.venv\Scripts\Activate.ps1       # Windows PowerShell
+
 pip install -r requirements.txt
 ```
 
 This installs the **CPU build** of PyTorch, which works on any machine — no GPU required.
 The training scripts automatically fall back to the CPU; training just runs slower.
+
+**Running the notebooks (`notebooks/eda.ipynb`, `notebooks/results_analysis.ipynb`).** Make sure
+the notebook's Jupyter kernel points at this `.venv`, not at some other Python on your machine.
+In VS Code: open the notebook, click the kernel selector (top right) and pick the interpreter
+under `.venv`. If `.venv` doesn't appear in the list, register it once:
+
+```bash
+python -m ipykernel install --user --name capstone-venv --display-name "Python (capstone .venv)"
+```
+
+then select **Python (capstone .venv)** as the kernel.
 
 **Optional — NVIDIA GPU acceleration.** If you have an NVIDIA (CUDA) GPU with drivers
 installed, additionally install the CUDA build of PyTorch (pip cannot detect a GPU from a
@@ -79,9 +99,11 @@ Reads the SeizeIT2 recordings and caches a single array (run once; train as ofte
 like). Steps:
 
 - **Power-line noise removal** — 50 Hz notch + harmonics (European mains).
-- **Sliding-window segmentation** — 50 s windows, 5 s step (final config).
-- **Band-power sequence** (`--input-rep bandpower_seq`): log band-power per EEG/ECG channel in
-  short frames across each window — the CNN input for the final model (not raw waveforms).
+- **Sliding-window segmentation** — 2 s windows, 1 s step (final config).
+- **Raw waveform input** (`--input-rep raw`, the default and the final model): each window is
+  the z-scored raw signal — 512 samples (2 s × 256 Hz) per channel — fed straight to the 1-D
+  CNN. A hand-crafted band-power-sequence representation (`--input-rep bandpower_seq`) is also
+  available, but the reported models use the raw waveform.
 - **Per-recording, per-channel z-score normalization** (`--normalize`, default `per_recording`):
   one mean/std per channel over the whole recording, which keeps the cross-window amplitude
   dynamics that carry pre-ictal information (`per_window` is also available).
@@ -122,23 +144,22 @@ average pre-ictal window plot, and a **Grad-CAM** figure.
 ## Usage
 
 ```bash
-# EEG-only (from src/seizure_prediction_eeg)
-python preprocess_eeg.py --window-sec 50 --step-sec 5 --preictal-min 10 \
-  --require-ecg --input-rep bandpower_seq
+# EEG-only baseline (from src/seizure_prediction_eeg)
+python preprocess_eeg.py --window-sec 2 --step-sec 1 --preictal-min 10 \
+  --require-ecg --input-rep raw
 python train_model_eeg.py --ensemble-runs 5 --random-state 42 --epochs 50 --patience 8
 python evaluate_eeg.py --eval-split val    # tune / monitor
 python evaluate_eeg.py --eval-split test   # final held-out report
 
 # EEG + ECG (from src/seizure_prediction_eeg_ecg)
-python preprocess_eeg_ecg.py --window-sec 50 --step-sec 5 --preictal-min 10 \
-  --input-rep bandpower_seq
+python preprocess_eeg_ecg.py --window-sec 2 --step-sec 1 --preictal-min 10 \
+  --input-rep raw
 python train_model_eeg_ecg.py --ensemble-runs 5 --random-state 42 --epochs 50 --patience 8
 python evaluate_eeg_ecg.py --eval-split test
-
-# RandomForest baseline (repo root; train + evaluate in one script)
-python src/baseline_rf.py --data data/processed/eeg_windows.npz --feature-set eeg --eval-split test
-python src/baseline_rf.py --data data/processed/eeg_ecg_windows.npz --feature-set eeg_ecg --eval-split test
 ```
+
+`--require-ecg` on the EEG-only arm restricts it to the subjects that also have an ECG channel,
+so both pipelines run on the **same** subjects — a paired, apples-to-apples comparison.
 
 Every script accepts `--help` for its options. For a robust comparison, repeat
 train+evaluate across several `--random-state` seeds and report the mean ± std (single runs
@@ -146,14 +167,17 @@ are noisy on these small per-subject test sets).
 
 ## Baseline
 
-`src/baseline_rf.py` is a **RandomForest baseline** for comparison against the CNN. It uses the
-same preprocessed windows and the same within-subject 60/20/20 split, but instead of learning
-from the raw waveform it trains on hand-crafted **log band-power features** (delta, theta,
-alpha, beta, gamma per channel). It trains on the train block and reports on the held-out test
-block, so AUC-ROC / AUC-PR / per-subject AUC / F1 are directly comparable to `evaluate_*.py`.
-Results are written to `results/seizure_prediction_<feature-set>/test/baseline_rf_metrics.csv`
-and a matching report. A tree-based baseline like this also makes the CNN's added value
-explicit and gives an interpretable feature-importance ranking.
+The baseline is the **EEG-only raw CNN** — the model the EEG + ECG variant has to beat. It is
+the natural reference: the research question is whether a single ECG channel adds anything on
+top of behind-the-ear EEG, so the fairest yardstick is the same network on EEG alone. Both arms
+share the architecture, the raw-waveform input, and the within-subject 60/20/20 split, and the
+EEG-only arm is run with `--require-ecg` so the two pipelines see the same subjects. Any
+difference in AUC-ROC / AUC-PR / per-subject AUC / F1 is therefore attributable to ECG. The
+EEG-only test report under `results/seizure_prediction_eeg/test/` is the reference that every
+EEG + ECG run is compared against in `notebooks/results_analysis.ipynb`.
+
+An earlier RandomForest band-power baseline has been retired; it is no longer part of the
+pipeline and survives only under `archive/`.
 
 ## Reporting
 
