@@ -1,36 +1,36 @@
 ==========================================================
   RandomForest BASELINE   feature_set=eeg_ecg
-  split=TEST   n_eval=42,154   pre-ictal=7,129
+  split=TEST   n_eval=61,569   pre-ictal=11,436
 ==========================================================
-  AUC-ROC                : 0.530   (0.50 = chance)
-  AUC-PR                 : 0.180   (baseline 0.169)
-  mean per-subject AUC   : 0.556 +/- 0.269   (n=56)
-  mean per-subj AUC (sm) : 0.585   (best smoothing 120s)
-  Precision/Recall/F1    : 0.156 / 0.138 / 0.147   (@ thr 0.29, val-tuned (best F1 on VAL))
-  Confusion [tn fp fn tp]: [29674 5351 6142 987]
-  @ thr 0.50 (CNN default): P 0.180 / R 0.072 / F1 0.102  [32702 2323 6619 510]
+  AUC-ROC                : 0.434   (0.50 = chance)
+  AUC-PR                 : 0.153   (baseline 0.186)
+  mean per-subject AUC   : 0.448 +/- 0.196   (n=10)
+  mean per-subj AUC (sm) : 0.449   (best smoothing 30s)
+  Precision/Recall/F1    : 0.139 / 0.291 / 0.188   (@ thr 0.36, val-tuned (best F1 on VAL))
+  Confusion [tn fp fn tp]: [29476 20657 8112 3324]
+  @ thr 0.50 (CNN default): P 0.102 / R 0.121 / F1 0.111  [37968 12165 10051 1385]
 
-  Prob pre-ictal  mean/median: 0.206 / 0.167
-  Prob interictal mean/median: 0.200 / 0.157
+  Prob pre-ictal  mean/median: 0.284 / 0.250
+  Prob interictal mean/median: 0.345 / 0.297
 
   Threshold sweep (P / R / F1):
-    thr 0.10:  P 0.177   R 0.818   F1 0.291
-    thr 0.15:  P 0.193   R 0.639   F1 0.296
-    thr 0.20:  P 0.177   R 0.339   F1 0.233
-    thr 0.30:  P 0.154   R 0.132   F1 0.142
-    thr 0.40:  P 0.161   R 0.088   F1 0.114
-    thr 0.50:  P 0.180   R 0.072   F1 0.102
-    thr 0.60:  P 0.184   R 0.056   F1 0.086
+    thr 0.10:  P 0.184   R 0.864   F1 0.303
+    thr 0.15:  P 0.187   R 0.779   F1 0.302
+    thr 0.20:  P 0.179   R 0.644   F1 0.280
+    thr 0.30:  P 0.151   R 0.389   F1 0.218
+    thr 0.40:  P 0.130   R 0.242   F1 0.169
+    thr 0.50:  P 0.102   R 0.121   F1 0.111
+    thr 0.60:  P 0.070   R 0.044   F1 0.054
 
-  Threshold tuning: best F1 on VAL = 0.338 at thr 0.29
+  Threshold tuning: best F1 on VAL = 0.415 at thr 0.36
 
   Top band-power features (RF importance):
-    ECG SD_delta       0.081
-    ECG SD_alpha       0.077
-    ECG SD_gamma       0.075
-    ECG SD_beta        0.075
-    ECG SD_theta       0.073
-    CROSStop SD_gamma  0.066
-    BTEleft SD_beta    0.066
-    BTEleft SD_gamma   0.065
+    ECG SD_beta        0.094
+    ECG SD_delta       0.089
+    ECG SD_gamma       0.084
+    ECG SD_alpha       0.084
+    ECG SD_theta       0.082
+    BTEleft SD_gamma   0.081
+    CROSStop SD_gamma  0.072
+    BTEleft SD_beta    0.072
 ==========================================================
