@@ -31,9 +31,10 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from captum.attr import LayerGradCam
+import torch.nn as nn
 
 from preprocess_common import load_preprocessed, subject_aware_split, _subject_from_path
-from model_common import SeizureCNN, pick_device
+from model_common import SeizureCNN, build_model, pick_device
 
 REPO_ROOT = Path(__file__).resolve().parent.parent  # src/ -> repo root
 
@@ -50,9 +51,10 @@ def _repo_relative(path: Path) -> str:
 def load_models(path: Path, device: torch.device) -> tuple[list[SeizureCNN], dict]:
     checkpoint = torch.load(path, map_location=device)
     meta = checkpoint["meta"]
-    models: list[SeizureCNN] = []
+    models = []
+    input_rep = meta.get("input_rep", "raw")
     for sd in checkpoint["state_dicts"]:
-        m = SeizureCNN(meta["n_channels"], meta["n_timepoints"]).to(device)
+        m = build_model(input_rep, meta["n_channels"], meta["n_timepoints"]).to(device)
         m.load_state_dict(sd)
         m.eval()
         models.append(m)
@@ -115,11 +117,15 @@ def temporal_smooth_prob(prob: np.ndarray, centers: np.ndarray,
     if k <= 1:
         return prob.astype(np.float32, copy=True)
     out = np.empty(len(prob), dtype=np.float64)
-    kernel = np.ones(k, dtype=np.float64)
     for s in np.unique(subj):
         idx = np.nonzero(subj == s)[0]
         order = idx[np.argsort(centers[idx])]          # chronological within subject
         p = prob[order].astype(np.float64)
+        # Cap the kernel at the subject's window count: np.convolve(mode="same")
+        # returns max(len(p), len(kernel)) samples, so a kernel longer than this
+        # subject's test windows would break the assignment back into `out`.
+        kk = min(k, len(p))
+        kernel = np.ones(kk, dtype=np.float64)
         num = np.convolve(p, kernel, mode="same")
         den = np.convolve(np.ones_like(p), kernel, mode="same")
         out[order] = num / den
@@ -150,6 +156,17 @@ def _block_metrics(prob: np.ndarray, y: np.ndarray, thr: float, min_run: int) ->
             "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)}
 
 
+def best_f1_threshold(y: np.ndarray, prob: np.ndarray, min_run: int,
+                      lo: float = 0.05, hi: float = 0.95, step: float = 0.01
+                      ) -> tuple[float, float]:
+    """Return (threshold, F1) maximising F1 on the given set (with min-run filter)."""
+    best_t, best_f1 = 0.5, -1.0
+    for t in np.arange(lo, hi + 1e-9, step):
+        f = _block_metrics(prob, y, float(t), min_run)["f1"]
+        if f > best_f1:
+            best_f1, best_t = f, float(t)
+    return best_t, best_f1
+
 # ── Metrics logging ───────────────────────────────────────────────────────────
 
 def append_metrics_csv(csv_path: Path, row: dict) -> None:
@@ -165,6 +182,48 @@ def append_metrics_csv(csv_path: Path, row: dict) -> None:
 
 
 # ── Plots ─────────────────────────────────────────────────────────────────────
+
+def _last_conv1d_layer(model: nn.Module) -> nn.Conv1d:
+    for m in reversed(list(model.conv_block.modules())):
+        if isinstance(m, nn.Conv1d):
+            return m
+    raise ValueError("No Conv1d layer found in model.conv_block")
+
+
+def _resize_1d(arr: np.ndarray, n: int) -> np.ndarray:
+    if len(arr) == n:
+        return arr.astype(np.float32)
+    x_old = np.linspace(0.0, 1.0, len(arr))
+    x_new = np.linspace(0.0, 1.0, n)
+    return np.interp(x_new, x_old, arr).astype(np.float32)
+
+
+def _frame_time_axis(n_frames: int, frame_sec: float, frame_step_sec: float) -> np.ndarray:
+    """Center time (seconds) of each band-power frame within the window."""
+    return (np.arange(n_frames, dtype=np.float64) * frame_step_sec + frame_sec * 0.5)
+
+
+def _gradcam_attribution(model, grad_cam: LayerGradCam, inp: torch.Tensor,
+                         n_features: int, n_frames: int) -> np.ndarray:
+    """(n_features, n_frames) non-negative saliency in [0, 1]."""
+    attr = grad_cam.attribute(inp, target=1).detach().cpu().numpy()
+    if attr.ndim == 3:
+        heat = attr.squeeze(0)
+    elif attr.ndim == 2:
+        heat = attr
+    else:
+        raise ValueError(f"Unexpected Grad-CAM shape: {attr.shape}")
+    if heat.ndim == 1:
+        heat = np.tile(_resize_1d(heat, n_frames)[None, :], (n_features, 1))
+    elif heat.shape[0] != n_features or heat.shape[1] != n_frames:
+        # Deeper layer: resize time, broadcast across features if needed.
+        t = _resize_1d(heat.mean(axis=0), n_frames)
+        heat = np.tile(t[None, :], (n_features, 1))
+    heat = np.maximum(heat.astype(np.float32), 0.0)
+    if heat.max() > 0:
+        heat /= heat.max()
+    return heat
+
 
 def plot_average_preictal(x, y, channel_names, window_sec, save_path, show, max_channels=6):
     """Mean ± 1 SD of every pre-ictal window, one subplot per channel."""
@@ -208,7 +267,7 @@ def plot_gradcam(model, x_test, y_test, channel_names, window_sec, n_samples,
         return
     probs = predict_positive_prob(model, x_test, device)
     best = pos[np.argsort(probs[pos])[::-1][:n_samples]]
-    grad_cam = LayerGradCam(model, model.conv_block[10])
+    grad_cam = LayerGradCam(model, _last_conv1d_layer(model))
     model.eval()
     n_ch = min(len(channel_names), 6)
     t_axis = np.linspace(0, window_sec, x_test.shape[2])
@@ -248,6 +307,56 @@ def plot_gradcam(model, x_test, y_test, channel_names, window_sec, n_samples,
     plt.show() if show else plt.close(fig)
 
 
+def plot_gradcam_bandpower(model, x_test, y_test, feature_names, window_sec,
+                           frame_sec, frame_step_sec, n_samples, save_path,
+                           device, show):
+    """Grad-CAM for band-power sequences: input heatmap + saliency for the most
+    confident true pre-ictal windows (highest p(pre-ictal))."""
+    pos = np.where(y_test == 1)[0]
+    if len(pos) == 0:
+        print("[GradCAM] No pre-ictal windows in test set — skipping.")
+        return
+    probs = predict_positive_prob(model, x_test, device)
+    best = pos[np.argsort(probs[pos])[::-1][:n_samples]]
+    grad_cam = LayerGradCam(model, _last_conv1d_layer(model))
+    model.eval()
+    n_features, n_frames = x_test.shape[1], x_test.shape[2]
+    t_axis = _frame_time_axis(n_frames, frame_sec, frame_step_sec)
+    fig, axes = plt.subplots(len(best), 2, figsize=(12, 2.8 * len(best)), squeeze=False)
+    for row, wi in enumerate(best):
+        inp = torch.from_numpy(x_test[wi:wi + 1]).to(device).requires_grad_(True)
+        values = x_test[wi]
+        heat = _gradcam_attribution(model, grad_cam, inp, n_features, n_frames)
+
+        ax_in, ax_cam = axes[row, 0], axes[row, 1]
+        vmax = max(float(np.percentile(np.abs(values), 99)), 0.5)
+        im_in = ax_in.imshow(values, aspect="auto", origin="lower", cmap="RdBu_r",
+                             vmin=-vmax, vmax=vmax,
+                             extent=[t_axis[0], t_axis[-1], -0.5, n_features - 0.5])
+        ax_in.set_yticks(range(n_features))
+        ax_in.set_yticklabels(feature_names, fontsize=7)
+        ax_in.set_xlabel("Time in window (s)", fontsize=8)
+        ax_in.set_title(f"Band-power input  |  p={probs[wi]:.2f}", fontsize=9)
+
+        im_cam = ax_cam.imshow(heat, aspect="auto", origin="lower", cmap="hot",
+                               vmin=0.0, vmax=1.0,
+                               extent=[t_axis[0], t_axis[-1], -0.5, n_features - 0.5])
+        ax_cam.set_yticks(range(n_features))
+        ax_cam.set_yticklabels(feature_names, fontsize=7)
+        ax_cam.set_xlabel("Time in window (s)", fontsize=8)
+        ax_cam.set_title("Grad-CAM saliency (why the model cares)", fontsize=9)
+        if row == 0:
+            fig.colorbar(im_in, ax=axes[0, 0], fraction=0.02, pad=0.02, label="z-scored log power")
+            fig.colorbar(im_cam, ax=axes[0, 1], fraction=0.02, pad=0.02, label="attribution")
+
+    fig.suptitle("Most confident true pre-ictal windows  |  band-power + Grad-CAM", fontsize=11)
+    fig.tight_layout()
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=150)
+    print(f"[GradCAM] Saved to {save_path}")
+    plt.show() if show else plt.close(fig)
+
+
 # ── CLI helper + orchestration ────────────────────────────────────────────────
 
 def add_eval_args(parser, default_data, default_model, default_results_dir, default_feature_set):
@@ -263,7 +372,9 @@ def add_eval_args(parser, default_data, default_model, default_results_dir, defa
     parser.add_argument("--eval-split", choices=["val", "test"], default="val",
                         help="Which held-out set to report on. 'val' (default) for tuning "
                              "hyperparameters/threshold; 'test' for the final, one-time evaluation.")
-    parser.add_argument("--pred-threshold", type=float, default=0.5)
+    parser.add_argument("--pred-threshold", type=float, default=None,
+                        help="Decision threshold. Default: F1-optimal on VAL (test split) or "
+                             "on TRAIN subsample (val split), with --pred-min-run applied.")
     parser.add_argument("--pred-min-run", type=int, default=2)
     parser.add_argument("--gradcam-n-samples", type=int, default=4)
     parser.add_argument("--no-gpu", action="store_true")
@@ -271,7 +382,7 @@ def add_eval_args(parser, default_data, default_model, default_results_dir, defa
 
 
 def run_evaluation(args: argparse.Namespace) -> None:
-    if not (0.0 < args.pred_threshold < 1.0):
+    if args.pred_threshold is not None and not (0.0 < args.pred_threshold < 1.0):
         raise ValueError("--pred-threshold must be in (0, 1)")
     if args.pred_min_run < 1:
         raise ValueError("--pred-min-run must be >= 1")
@@ -322,9 +433,27 @@ def run_evaluation(args: argparse.Namespace) -> None:
     print(f"  Reporting on: {banner}")
     print(f"  windows={len(x_test):,}  (pre-ictal: {int(y_test.sum()):,})\n")
 
-    thr, min_run = args.pred_threshold, args.pred_min_run
+    min_run = args.pred_min_run
     prob_test = average_positive_prob(models, x_test, device)
+
+    # Pick decision threshold: manual, val-tuned (test), or train-tuned (val).
+    rng = np.random.default_rng(0)
+    tr_sub = (train_idx if len(train_idx) <= 20000
+              else np.sort(rng.choice(train_idx, 20000, replace=False)))
+    if args.pred_threshold is not None:
+        thr, thr_source = float(args.pred_threshold), "manual"
+    elif eval_split == "test":
+        prob_val = average_positive_prob(models, x[val_idx], device)
+        thr, tune_f1 = best_f1_threshold(y[val_idx], prob_val, min_run)
+        thr_source = f"val-tuned (best F1={tune_f1:.3f} on VAL)"
+    else:
+        prob_tr_tune = average_positive_prob(models, x[tr_sub], device)
+        thr, tune_f1 = best_f1_threshold(y[tr_sub], prob_tr_tune, min_run)
+        thr_source = f"train-tuned (best F1={tune_f1:.3f} on TRAIN)"
+
+    print(f"[Threshold] {thr:.2f}  ({thr_source})\n")
     m = _block_metrics(prob_test, y_test, thr, min_run)
+    m05 = _block_metrics(prob_test, y_test, 0.5, min_run)
 
     # threshold-independent ranking quality
     two_classes = len(np.unique(y_test)) > 1
@@ -332,9 +461,6 @@ def run_evaluation(args: argparse.Namespace) -> None:
     auc_pr = average_precision_score(y_test, prob_test) if two_classes else float("nan")
 
     # over/underfit check: F1 on a subsample of the training data
-    rng = np.random.default_rng(0)
-    tr_sub = (train_idx if len(train_idx) <= 20000
-              else np.sort(rng.choice(train_idx, 20000, replace=False)))
     prob_train = average_positive_prob(models, x[tr_sub], device)
     train_f1 = _block_metrics(prob_train, y[tr_sub], thr, min_run)["f1"]
 
@@ -366,7 +492,8 @@ def run_evaluation(args: argparse.Namespace) -> None:
     bar = "=" * 60
     lines = [
         bar,
-        f"  EVALUATION REPORT   feature_set={args.feature_set}   threshold={thr}",
+        f"  EVALUATION REPORT   feature_set={args.feature_set}   threshold={thr:.2f}",
+        f"  threshold source     : {thr_source}",
         f"  eval split={eval_split.upper()}   model={_repo_relative(args.model)}   "
         f"epochs={meta.get('epochs')}   seed={meta.get('random_state')}",
         bar,
@@ -377,6 +504,8 @@ def run_evaluation(args: argparse.Namespace) -> None:
         f"  Accuracy       : {m['accuracy']:.3f}   (misleading under imbalance)",
         f"  Balanced acc   : {m['balanced_acc']:.3f}",
         f"  Confusion [tn fp fn tp]: [{m['tn']} {m['fp']} {m['fn']} {m['tp']}]",
+        f"  @ thr 0.50 (legacy)  : P {m05['precision']:.3f} / R {m05['recall']:.3f} / "
+        f"F1 {m05['f1']:.3f}  [{m05['tn']} {m05['fp']} {m05['fn']} {m05['tp']}]",
         "",
         f"  AUC-ROC        : {auc_roc:.3f}   (0.50 = chance)",
         f"  AUC-PR         : {auc_pr:.3f}   (baseline {y_test.mean():.3f} = positive rate)",
@@ -394,10 +523,11 @@ def run_evaluation(args: argparse.Namespace) -> None:
         "",
         "  Threshold sweep (P / R / F1):",
     ]
-    for t in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8):
+    sweep_ts = sorted({0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, round(thr, 2)})
+    for t in sweep_ts:
         mm = _block_metrics(prob_test, y_test, t, min_run)
-        marker = "  <-- current" if abs(t - thr) < 1e-9 else ""
-        lines.append(f"    thr {t:.1f}:  P {mm['precision']:.3f}   R {mm['recall']:.3f}   "
+        marker = "  <-- current" if abs(t - thr) < 0.005 else ""
+        lines.append(f"    thr {t:.2f}:  P {mm['precision']:.3f}   R {mm['recall']:.3f}   "
                      f"F1 {mm['f1']:.3f}{marker}")
     lines += ["", f"  Per-subject {eval_split} (AUC = within-patient ranking quality):"]
     subj_aucs, per_subject_rows = [], []
@@ -451,11 +581,14 @@ def run_evaluation(args: argparse.Namespace) -> None:
         "interictal_ratio": meta.get("interictal_ratio"),
         "preictal_sec": meta.get("preictal_sec"),
         "normalize": data.get("normalize", "per_window"),
-        "pred_threshold": thr,
+        "pred_threshold": round(thr, 4),
         "pred_min_run": min_run,
         "precision": round(m["precision"], 4),
         "recall": round(m["recall"], 4),
         "f1": round(m["f1"], 4),
+        "precision_thr050": round(m05["precision"], 4),
+        "recall_thr050": round(m05["recall"], 4),
+        "f1_thr050": round(m05["f1"], 4),
         "accuracy": round(m["accuracy"], 4),
         "balanced_acc": round(m["balanced_acc"], 4),
         "auc_roc": round(float(auc_roc), 4),
@@ -472,6 +605,16 @@ def run_evaluation(args: argparse.Namespace) -> None:
 
     plot_average_preictal(x, y, channel_names, window_sec,
                           out_base / "average_preictal.png", args.show)
-    plot_gradcam(models[0], x_test, y_test, channel_names, window_sec,
-                 args.gradcam_n_samples, out_base / "gradcam.png",
-                 device, args.show)
+    input_rep = meta.get("input_rep", "raw")
+    if input_rep == "raw":
+        plot_gradcam(models[0], x_test, y_test, channel_names, window_sec,
+                     args.gradcam_n_samples, out_base / "gradcam.png",
+                     device, args.show)
+    elif input_rep == "bandpower_seq":
+        plot_gradcam_bandpower(
+            models[0], x_test, y_test, channel_names, window_sec,
+            float(data.get("frame_sec", 4.0)),
+            float(data.get("frame_step_sec", 1.0)),
+            args.gradcam_n_samples, out_base / "gradcam.png", device, args.show)
+    else:
+        print(f"[GradCAM] Skipped (input_rep={input_rep}).")

@@ -1,0 +1,50 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.5
+  eval split=VAL   model=models/siena/cnn_eeg_s44.pt   epochs=30   seed=44
+============================================================
+  Precision      : 0.284
+  Recall (sens.) : 0.375
+  Specificity    : 0.789
+  F1             : 0.323
+  Accuracy       : 0.714   (misleading under imbalance)
+  Balanced acc   : 0.582
+  Confusion [tn fp fn tp]: [4126 1103 727 437]
+
+  AUC-ROC        : 0.641   (0.50 = chance)
+  AUC-PR         : 0.291   (baseline 0.182 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.641            0.656  (n=14)
+     30s (6 win)       0.638            0.662  (n=14)
+     60s (12 win)      0.644            0.671  (n=14)
+    120s (24 win)      0.657            0.691  (n=14)
+
+  Over/underfit  : train F1 0.550  vs  test F1 0.323  (gap +0.227)
+
+  Threshold sweep (P / R / F1):
+    thr 0.2:  P 0.250   R 0.666   F1 0.363
+    thr 0.3:  P 0.276   R 0.563   F1 0.370
+    thr 0.4:  P 0.283   R 0.459   F1 0.350
+    thr 0.5:  P 0.284   R 0.375   F1 0.323  <-- current
+    thr 0.6:  P 0.299   R 0.308   F1 0.303
+    thr 0.7:  P 0.323   R 0.248   F1 0.281
+    thr 0.8:  P 0.342   R 0.180   F1 0.235
+
+  Per-subject val (AUC = within-patient ranking quality):
+    PN00:  AUC 0.258   P 0.158   R 0.100   F1 0.122   (n_preictal 120 / 270)
+    PN01:  AUC 0.953   P 0.737   R 0.583   F1 0.651   (n_preictal 48 / 288)
+    PN03:  AUC 0.980   P 0.387   R 1.000   F1 0.558   (n_preictal 48 / 288)
+    PN05:  AUC 0.331   P 0.124   R 0.306   F1 0.176   (n_preictal 72 / 432)
+    PN06:  AUC 0.805   P 0.394   R 0.633   F1 0.486   (n_preictal 180 / 1036)
+    PN07:  AUC 0.737   P 0.636   R 0.583   F1 0.609   (n_preictal 24 / 144)
+    PN09:  AUC 0.595   P 0.243   R 0.361   F1 0.291   (n_preictal 72 / 432)
+    PN10:  AUC 0.689   P 0.505   R 0.245   F1 0.330   (n_preictal 216 / 1296)
+    PN11:  AUC 0.770   P 0.300   R 0.750   F1 0.429   (n_preictal 24 / 144)
+    PN12:  AUC 0.594   P 0.227   R 0.302   F1 0.259   (n_preictal 96 / 479)
+    PN13:  AUC 0.451   P 0.153   R 0.181   F1 0.166   (n_preictal 72 / 432)
+    PN14:  AUC 0.376   P 0.078   R 0.198   F1 0.112   (n_preictal 96 / 576)
+    PN16:  AUC 0.698   P 0.138   R 0.083   F1 0.104   (n_preictal 48 / 288)
+    PN17:  AUC 0.948   P 0.673   R 0.771   F1 0.718   (n_preictal 48 / 288)
+    mean per-subject AUC (subjects with positives): 0.656 ± 0.226  (n=14)
+============================================================

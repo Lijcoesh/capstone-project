@@ -1,2 +1,7 @@
-timestamp,model,feature_set,auc_roc,auc_pr,mean_subj_auc,precision,recall,f1,tn,fp,fn,tp,n_test,n_estimators,random_state
-2026-06-15T13:06:23,randomforest_bandpower,eeg_ecg,0.5677,0.2051,0.5539,0.2464,0.1156,0.1574,82004,6359,15898,2079,106340,300,42
+timestamp,model,feature_set,eval_split,auc_roc,auc_pr,mean_subj_auc,mean_subj_auc_smooth,pred_threshold,precision,recall,f1,precision_thr050,recall_thr050,f1_thr050,tn,fp,fn,tp,n_test,n_estimators,random_state
+2026-06-18T11:26:03,randomforest_bandpower,eeg_ecg,test,0.5302,0.1795,0.5564,0.5852,0.29,0.1557,0.1384,0.1466,0.18,0.0715,0.1024,29674,5351,6142,987,42154,300,42
+2026-06-18T11:26:40,randomforest_bandpower,eeg_ecg,test,0.5231,0.1769,0.5593,0.5962,0.27,0.1588,0.1697,0.1641,0.1757,0.0717,0.1018,28617,6408,5919,1210,42154,300,43
+2026-06-18T11:27:18,randomforest_bandpower,eeg_ecg,test,0.5229,0.177,0.5569,0.5864,0.28,0.1561,0.153,0.1546,0.1749,0.0713,0.1013,29128,5897,6038,1091,42154,300,44
+2026-06-18T11:27:56,randomforest_bandpower,eeg_ecg,test,0.5166,0.1754,0.5625,0.5958,0.26,0.1555,0.1689,0.1619,0.1821,0.0727,0.1039,28488,6537,5925,1204,42154,300,45
+2026-06-18T11:28:34,randomforest_bandpower,eeg_ecg,test,0.5304,0.1788,0.5605,0.5954,0.31,0.166,0.1394,0.1515,0.1719,0.0701,0.0996,30030,4995,6135,994,42154,300,46
+2026-06-18T12:43:15,randomforest_bandpower,eeg_ecg,test,0.5302,0.1795,0.5564,0.5852,0.29,0.1557,0.1384,0.1466,0.18,0.0715,0.1024,29674,5351,6142,987,42154,300,42

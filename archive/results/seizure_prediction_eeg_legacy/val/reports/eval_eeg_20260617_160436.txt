@@ -1,0 +1,56 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.5
+  eval split=VAL   model=models/seizure_prediction_eeg/cnn_pred_w50_s45.pt   epochs=30   seed=45
+============================================================
+  Precision      : 0.179
+  Recall (sens.) : 0.798
+  Specificity    : 0.259
+  F1             : 0.292
+  Accuracy       : 0.350   (misleading under imbalance)
+  Balanced acc   : 0.528
+  Confusion [tn fp fn tp]: [1720 4922 272 1072]
+
+  AUC-ROC        : 0.549   (0.50 = chance)
+  AUC-PR         : 0.197   (baseline 0.168 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.549            0.547  (n=20)
+     30s (6 win)       0.563            0.577  (n=20)
+     60s (12 win)      0.566            0.585  (n=20)
+    120s (24 win)      0.570            0.592  (n=20)
+
+  Over/underfit  : train F1 0.335  vs  test F1 0.292  (gap +0.043)
+
+  Threshold sweep (P / R / F1):
+    thr 0.2:  P 0.168   R 0.991   F1 0.288
+    thr 0.3:  P 0.170   R 0.989   F1 0.290
+    thr 0.4:  P 0.173   R 0.966   F1 0.293
+    thr 0.5:  P 0.179   R 0.798   F1 0.292  <-- current
+    thr 0.6:  P 0.319   R 0.077   F1 0.125
+    thr 0.7:  P 0.000   R 0.000   F1 0.000
+    thr 0.8:  P 0.000   R 0.000   F1 0.000
+
+  Per-subject val (AUC = within-patient ranking quality):
+    sub-001:  AUC 0.410   P 0.172   R 0.490   F1 0.254   (n_preictal 96 / 576)
+    sub-002:  AUC 0.479   P 0.153   R 0.810   F1 0.257   (n_preictal 336 / 2016)
+    sub-003:  AUC 0.786   P 0.232   R 0.958   F1 0.374   (n_preictal 24 / 144)
+    sub-004:  AUC 0.706   P 0.179   R 0.948   F1 0.301   (n_preictal 96 / 576)
+    sub-005:  AUC 0.518   P 0.181   R 0.479   F1 0.263   (n_preictal 48 / 288)
+    sub-006:  AUC 0.545   P 0.231   R 0.875   F1 0.365   (n_preictal 24 / 144)
+    sub-007:  AUC 0.280   P 0.172   R 0.958   F1 0.292   (n_preictal 48 / 288)
+    sub-008:  AUC 0.582   P 0.186   R 0.271   F1 0.220   (n_preictal 48 / 288)
+    sub-009:  AUC 0.292   P 0.174   R 0.958   F1 0.295   (n_preictal 24 / 144)
+    sub-010:  AUC 0.567   P 0.289   R 0.458   F1 0.355   (n_preictal 24 / 144)
+    sub-011:  AUC 0.574   P 0.237   R 0.806   F1 0.366   (n_preictal 72 / 383)
+    sub-012:  AUC 0.749   P 0.203   R 0.847   F1 0.328   (n_preictal 72 / 432)
+    sub-013:  AUC 0.689   P 0.216   R 1.000   F1 0.356   (n_preictal 48 / 288)
+    sub-014:  AUC 0.293   P 0.133   R 0.625   F1 0.219   (n_preictal 48 / 288)
+    sub-015:  AUC 0.652   P 0.208   R 0.972   F1 0.343   (n_preictal 216 / 1267)
+    sub-016:  AUC 0.041   P 0.000   R 0.000   F1 0.000   (n_preictal 24 / 144)
+    sub-017:  AUC 0.686   P 0.174   R 1.000   F1 0.296   (n_preictal 24 / 144)
+    sub-018:  AUC 0.891   P 0.229   R 1.000   F1 0.372   (n_preictal 24 / 144)
+    sub-019:  AUC 0.576   P 0.198   R 0.958   F1 0.329   (n_preictal 24 / 144)
+    sub-020:  AUC 0.625   P 0.173   R 1.000   F1 0.294   (n_preictal 24 / 144)
+    mean per-subject AUC (subjects with positives): 0.547 ± 0.198  (n=20)
+============================================================

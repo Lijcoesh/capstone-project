@@ -1,0 +1,4 @@
+timestamp,model,feature_set,auc_roc,auc_pr,mean_subj_auc,precision,recall,f1,tn,fp,fn,tp,n_test,n_estimators,random_state
+2026-06-17T17:25:37,randomforest_bandpower,eeg,0.6697,0.2762,0.7237,0.3168,0.2374,0.2714,5953,688,1025,319,7985,300,42
+2026-06-17T17:32:00,randomforest_bandpower,eeg,0.6712,0.2853,0.7221,0.3113,0.2351,0.2679,5942,699,1028,316,7985,300,43
+2026-06-17T17:32:33,randomforest_bandpower,eeg,0.67,0.2742,0.7315,0.3222,0.244,0.2777,5951,690,1016,328,7985,300,44

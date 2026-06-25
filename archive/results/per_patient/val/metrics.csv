@@ -1,0 +1,6 @@
+timestamp,feature_set,eval_split,train_frac,val_frac,epochs,random_state,n_runs,interictal_ratio,preictal_sec,normalize,pred_threshold,pred_min_run,precision,recall,f1,accuracy,balanced_acc,auc_roc,auc_pr,mean_subj_auc,smooth_sec,auc_roc_smooth,mean_subj_auc_smooth,train_f1,tn,fp,fn,tp,n_test,n_test_preictal,model_path
+2026-06-17T20:54:59,eeg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.1751,1.0,0.298,0.2148,0.5289,0.664,0.2534,0.664,120,0.6834,0.6834,0.3466,97,1583,0,336,2016,336,models/per_patient/cnn_sub-002.pt
+2026-06-17T20:56:54,eeg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.2395,0.7407,0.362,0.5545,0.6285,0.6709,0.2454,0.6709,120,0.7622,0.7622,0.5107,542,508,56,160,1266,216,models/per_patient/cnn_sub-015.pt
+2026-06-17T20:58:13,eeg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.1933,0.7222,0.305,0.3812,0.5122,0.4941,0.1751,0.4941,60,0.5289,0.5289,0.3553,94,217,20,52,383,72,models/per_patient/cnn_sub-011.pt
+2026-06-17T20:59:29,eeg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.2824,1.0,0.4404,0.5764,0.7458,0.8682,0.4928,0.8682,30,0.8779,0.8779,0.5548,177,183,0,72,432,72,models/per_patient/cnn_sub-012.pt
+2026-06-17T21:00:39,eeg,val,0.6,0.2,30,42,1,5.0,600.0,per_recording,0.5,2,0.3692,1.0,0.5393,0.7153,0.8292,0.9677,0.7817,0.9677,120,0.9817,0.9817,0.8582,158,82,0,48,288,48,models/per_patient/cnn_sub-007.pt

@@ -1,0 +1,20 @@
+==========================================================
+  RandomForest BASELINE   feature_set=eeg
+  split=VAL   n_eval=7,985   pre-ictal=1,344
+==========================================================
+  AUC-ROC                : 0.670   (0.50 = chance)
+  AUC-PR                 : 0.274   (baseline 0.168)
+  mean per-subject AUC   : 0.731 +/- 0.167   (n=20)
+  Precision/Recall/F1    : 0.322 / 0.244 / 0.278
+  Confusion [tn fp fn tp]: [5951 690 1016 328]
+
+  Top band-power features (RF importance):
+    CROSStop SD_gamma  0.110
+    CROSStop SD_alpha  0.104
+    CROSStop SD_theta  0.104
+    BTEleft SD_delta   0.103
+    BTEleft SD_theta   0.099
+    BTEleft SD_alpha   0.098
+    BTEleft SD_beta    0.097
+    BTEleft SD_gamma   0.096
+==========================================================

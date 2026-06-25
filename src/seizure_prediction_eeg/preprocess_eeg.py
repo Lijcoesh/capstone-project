@@ -18,10 +18,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from preprocess_common import (  # noqa: E402
+    DEFAULT_FRAME_SEC,
+    DEFAULT_FRAME_STEP_SEC,
+    DEFAULT_INPUT_REP,
     DEFAULT_INTERICTAL_RATIO,
+    DEFAULT_LABEL_MODE,
     DEFAULT_NORMALIZE,
     DEFAULT_STEP_SEC,
     DEFAULT_WINDOW_SEC,
+    INPUT_REP_CHOICES,
+    LABEL_MODE_CHOICES,
     NORMALIZE_CHOICES,
     PREICTAL_SEC,
     build_dataset,
@@ -49,6 +55,19 @@ def parse_args() -> argparse.Namespace:
                         help="Window normalization: 'per_window' (default) z-scores each "
                              "window; 'per_recording' uses one mean/std per channel over "
                              "the whole recording (keeps cross-window amplitude dynamics).")
+    parser.add_argument("--label-mode", choices=LABEL_MODE_CHOICES, default=DEFAULT_LABEL_MODE,
+                        help="'prediction' (default): pre-ictal vs interictal (the real task). "
+                             "'detection': ictal vs interictal — an easier sanity check that "
+                             "the pipeline can learn anything at all. Use a separate --out.")
+    parser.add_argument("--input-rep", choices=INPUT_REP_CHOICES, default=DEFAULT_INPUT_REP,
+                        help="'raw' (default): raw waveform for the 1-D CNN. 'bandpower_seq': "
+                             "log band-power per band in short frames across the window (the "
+                             "RF's features kept as a time sequence) — gives the CNN the spectral "
+                             "content WITH its temporal evolution. Tiny vs raw (avoids OOM).")
+    parser.add_argument("--frame-sec", type=float, default=DEFAULT_FRAME_SEC,
+                        help="bandpower_seq frame length in seconds (default 4).")
+    parser.add_argument("--frame-step-sec", type=float, default=DEFAULT_FRAME_STEP_SEC,
+                        help="bandpower_seq frame hop in seconds (default 1).")
     parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC)
     parser.add_argument("--step-sec", type=float, default=DEFAULT_STEP_SEC)
     parser.add_argument("--require-ecg", action="store_true",
@@ -74,6 +93,10 @@ def main() -> None:
         preictal_sec=args.preictal_min * 60.0,
         normalize=args.normalize,
         require_ecg=args.require_ecg,
+        label_mode=args.label_mode,
+        input_rep=args.input_rep,
+        frame_sec=args.frame_sec,
+        frame_step_sec=args.frame_step_sec,
     )
     save_preprocessed(args.out, result)
 
