@@ -88,7 +88,7 @@ like). Steps:
 - **Pre-ictal labeling** — pre-ictal = `[onset − 10 min, onset)` (positive); the seizure +
   a 10 min post-ictal guard are excluded; everything else is interictal.
 - **Interictal subsampling** — recordings are ~18 h, so all pre-ictal windows are kept and
-  interictal is subsampled at a fixed ratio (`--interictal-ratio`, default 5:1).
+  interictal is subsampled at a fixed ratio (`--interictal-ratio`, default 10:1).
 
 Output: `data/processed/eeg_windows.npz` (EEG) or `eeg_ecg_windows.npz` (EEG+ECG).
 
@@ -123,8 +123,7 @@ average pre-ictal window plot, and a **Grad-CAM** figure.
 
 ```bash
 # EEG-only (from src/seizure_prediction_eeg)
-python preprocess_eeg.py --window-sec 50 --step-sec 5 --preictal-min 10 \
-  --require-ecg --input-rep bandpower_seq
+python preprocess_eeg.py
 python train_model_eeg.py --ensemble-runs 5 --random-state 42 --epochs 50 --patience 8
 python evaluate_eeg.py --eval-split val    # tune / monitor
 python evaluate_eeg.py --eval-split test   # final held-out report

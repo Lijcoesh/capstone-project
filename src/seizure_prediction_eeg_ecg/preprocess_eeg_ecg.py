@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
         description="Preprocess SeizeIT2 EEG+ECG into a windowed .npz dataset (seizure prediction)."
     )
     parser.add_argument("--interictal-ratio", type=float, default=DEFAULT_INTERICTAL_RATIO,
-                        help="Interictal : pre-ictal windows kept (default 5).")
+                        help="Interictal : pre-ictal windows kept (default 10).")
     parser.add_argument("--preictal-min", type=float, default=PREICTAL_SEC / 60.0,
                         help="Pre-ictal horizon in minutes: windows within this many "
                              f"minutes before onset = positive (default {PREICTAL_SEC / 60:.0f}).")

@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
         description="Preprocess SeizeIT2 EEG into a windowed .npz dataset (seizure prediction)."
     )
     parser.add_argument("--interictal-ratio", type=float, default=DEFAULT_INTERICTAL_RATIO,
-                        help="Interictal : pre-ictal windows kept (default 5).")
+                        help="Interictal : pre-ictal windows kept (default 10).")
     parser.add_argument("--preictal-min", type=float, default=PREICTAL_SEC / 60.0,
                         help="Pre-ictal horizon in minutes: windows within this many "
                              f"minutes before onset = positive (default {PREICTAL_SEC / 60:.0f}).")
@@ -70,10 +70,11 @@ def parse_args() -> argparse.Namespace:
                         help="bandpower_seq frame hop in seconds (default 1).")
     parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC)
     parser.add_argument("--step-sec", type=float, default=DEFAULT_STEP_SEC)
-    parser.add_argument("--require-ecg", action="store_true",
-                        help="Keep only recordings that also have an ECG file, so this "
-                             "EEG-only set is built on the SAME recordings as the EEG+ECG "
-                             "set (fair paired comparison).")
+    parser.add_argument("--require-ecg", action="store_true", default=True,
+                        help="Keep only recordings with a paired ECG file (default: on), so "
+                             "this EEG-only set matches the EEG+ECG recordings.")
+    parser.add_argument("--no-require-ecg", action="store_false", dest="require_ecg",
+                        help="Include all EEG recordings, even when ECG is missing.")
     parser.add_argument("--subjects", type=str, nargs="+", default=None,
                         help="Limit to specific subjects, e.g. sub-001 sub-002 (default: all).")
     parser.add_argument("--random-state", type=int, default=42)
