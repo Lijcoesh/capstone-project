@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Evaluate the EEG + ECG seizure-prediction model on a held-out split
-(--eval-split: validation by default for tuning, or test for the final run).
+LOSO evaluation for the EEG+ECG seizure-prediction pipeline.
 
-Thin wrapper: the evaluation logic lives in evaluate_common; this just sets the
-EEG+ECG dataset/model/results paths and the feature-set label ('eeg_ecg') written
-to metrics.csv, so the notebook can compare EEG vs EEG+ECG.
+Same protocol as evaluate_eeg.py; writes results/seizure_prediction_eeg_ecg/loso/.
 
 Use:
   python evaluate_eeg_ecg.py
@@ -17,9 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from evaluate_common import add_eval_args, run_evaluation  # noqa: E402
-from preprocess_eeg_ecg import DEFAULT_PREPROCESSED_PATH    # noqa: E402
-from train_model_eeg_ecg import DEFAULT_MODEL_PATH          # noqa: E402
+from loso_common import add_loso_eval_args, run_loso_evaluation  # noqa: E402
+from preprocess_eeg_ecg import DEFAULT_PREPROCESSED_PATH                    # noqa: E402
 
 DEFAULT_RESULTS_DIR = (
     Path(__file__).resolve().parent / "../../results/seizure_prediction_eeg_ecg"
@@ -27,9 +23,11 @@ DEFAULT_RESULTS_DIR = (
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate the EEG+ECG seizure-prediction model.")
-    add_eval_args(parser, DEFAULT_PREPROCESSED_PATH, DEFAULT_MODEL_PATH, DEFAULT_RESULTS_DIR, "eeg_ecg")
-    run_evaluation(parser.parse_args())
+    parser = argparse.ArgumentParser(
+        description="LOSO evaluation with per-patient calibration (EEG+ECG)."
+    )
+    add_loso_eval_args(parser, DEFAULT_PREPROCESSED_PATH, DEFAULT_RESULTS_DIR, "eeg_ecg")
+    run_loso_evaluation(parser.parse_args())
 
 
 if __name__ == "__main__":

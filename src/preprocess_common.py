@@ -506,6 +506,78 @@ def _subject_from_path(path) -> str:
     return Path(path).name.split("_")[0]
 
 
+def build_subject_index_array(data: dict) -> np.ndarray:
+    """Map every window index to its BIDS subject id (e.g. 'sub-004')."""
+    n = len(data["X"])
+    subj_of = np.empty(n, dtype=object)
+    for (s, e), p in zip(data["file_slices"], data["recording_paths"]):
+        subj_of[s:e] = _subject_from_path(p)
+    return subj_of
+
+
+def _chrono_class_split(cls_idx: np.ndarray, frac_first: float) -> tuple[np.ndarray, np.ndarray]:
+    """Chronological cut: first `frac_first` -> block A, remainder -> block B."""
+    n = len(cls_idx)
+    if n == 0:
+        empty = np.array([], dtype=int)
+        return empty, empty
+    k = min(max(int(round(n * frac_first)), 1), n)
+    return cls_idx[:k], cls_idx[k:]
+
+
+def loso_fold_indices(
+        data: dict,
+        held_out: str,
+        subj_of: np.ndarray | None = None,
+        cal_frac: float = 0.2,
+        train_inner_frac: float = 0.8,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """LOSO index sets for one held-out subject.
+
+    Held-out subject P (simulates a *new patient*):
+      - calibration : first `cal_frac` of each class (chronological)
+      - test        : remainder of each class
+
+    All other subjects (population training pool):
+      - train       : first `train_inner_frac` of each class
+      - val         : remainder (early-stopping only; never used for P's threshold)
+
+    Returns (train_idx, val_idx, cal_idx, test_idx) into the concatenated window array.
+    """
+    if subj_of is None:
+        subj_of = build_subject_index_array(data)
+    y = data["y"]
+    empty = np.array([], dtype=int)
+
+    cal_parts, test_parts = [], []
+    ho_idx = np.nonzero(subj_of == held_out)[0]
+    for cls in (1, 0):
+        cls_idx = ho_idx[y[ho_idx] == cls]
+        cal, test = _chrono_class_split(cls_idx, cal_frac)
+        if len(cal):
+            cal_parts.append(cal)
+        if len(test):
+            test_parts.append(test)
+
+    train_parts, val_parts = [], []
+    for subj in np.unique(subj_of):
+        if subj == held_out:
+            continue
+        idx = np.nonzero(subj_of == subj)[0]
+        for cls in (1, 0):
+            cls_idx = idx[y[idx] == cls]
+            tr, va = _chrono_class_split(cls_idx, train_inner_frac)
+            if len(tr):
+                train_parts.append(tr)
+            if len(va):
+                val_parts.append(va)
+
+    def _cat(parts: list[np.ndarray]) -> np.ndarray:
+        return np.sort(np.concatenate(parts)) if parts else empty
+
+    return _cat(train_parts), _cat(val_parts), _cat(cal_parts), _cat(test_parts)
+
+
 def subject_aware_split(
         data: dict,
         train_frac: float = 0.6,

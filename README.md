@@ -106,33 +106,37 @@ Output: `data/processed/eeg_windows.npz` (EEG) or `eeg_ecg_windows.npz` (EEG+ECG
   probabilities are averaged at evaluation (soft voting).
 - The 1-D CNN adapts automatically to the channel count (2 for EEG, 3 for EEG+ECG).
 
-### 3. `evaluate_*` — evaluate on the held-out test set
+### 3. `evaluate_*` — LOSO + per-patient calibration
 
-Reconstructs the same test set and reports a full diagnostic block: precision / recall / F1 /
-specificity, confusion matrix, **AUC-ROC / AUC-PR**, an over/underfit check (train vs test F1),
-a threshold sweep, and **per-subject AUC** (the headline metric — the pooled AUC is biased by
-per-patient probability scales). Outputs to `results/seizure_prediction_*/`:
-`metrics.csv` (one row per run), `per_subject.csv`, a timestamped report under `reports/`, an
-average pre-ictal window plot, and a **Grad-CAM** figure.
+Default evaluation is **leave-one-subject-out (LOSO)** with per-patient threshold
+calibration — the clinically honest setup for a *new patient* the model never trained on:
 
-- **Optional ensemble** (`--ensemble-runs 5`): trains five independently initialized
-  models (seeds `random_state` … `random_state+4`); evaluation averages their class
-  probabilities (soft voting) before thresholding — this is the final reported CNN.
+- For each held-out subject `P`: train a fresh CNN on all **other** subjects.
+- **Calibration** (first 20% of `P`'s windows, chronological per class): tune a
+  patient-specific decision threshold.
+- **Test** (remaining 80% of `P`): report AUC and F1 before/after calibration.
+- **Before calibration**: population threshold tuned on the other subjects' val blocks.
+- **After calibration**: patient threshold tuned on `P`'s calibration block.
+
+Outputs under `results/seizure_prediction_*/loso/`:
+`loso_per_subject.csv` (one row per subject), `loso_metrics.csv` (summary),
+and a timestamped report under `loso/reports/`.
+
+`train_model_*.py` still trains one **deployment** model on the within-subject split;
+`evaluate_*.py` runs the rigorous LOSO protocol (re-trains per fold).
 
 ## Usage
 
 ```bash
 # EEG-only (from src/seizure_prediction_eeg)
 python preprocess_eeg.py
-python train_model_eeg.py --ensemble-runs 5 --random-state 42 --epochs 50 --patience 8
-python evaluate_eeg.py --eval-split val    # tune / monitor
-python evaluate_eeg.py --eval-split test   # final held-out report
+python train_model_eeg.py
+python evaluate_eeg.py          # LOSO + per-patient calibration (55 folds)
 
 # EEG + ECG (from src/seizure_prediction_eeg_ecg)
-python preprocess_eeg_ecg.py --window-sec 50 --step-sec 5 --preictal-min 10 \
-  --input-rep bandpower_seq
-python train_model_eeg_ecg.py --ensemble-runs 5 --random-state 42 --epochs 50 --patience 8
-python evaluate_eeg_ecg.py --eval-split test
+python preprocess_eeg_ecg.py
+python train_model_eeg_ecg.py
+python evaluate_eeg_ecg.py      # LOSO + per-patient calibration
 
 # RandomForest baseline (repo root; train + evaluate in one script)
 python src/baseline_rf.py --data data/processed/eeg_windows.npz --feature-set eeg --eval-split test
