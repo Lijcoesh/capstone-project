@@ -172,13 +172,40 @@ def best_f1_threshold(y: np.ndarray, prob: np.ndarray, min_run: int,
 def append_metrics_csv(csv_path: Path, row: dict) -> None:
     csv_path = Path(csv_path)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not csv_path.exists()
-    with open(csv_path, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
-        if write_header:
+    fields = list(row.keys())
+
+    if not csv_path.exists():
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
-        writer.writerow(row)
-    print(f"[Metrics] Appended run to {csv_path}")
+            writer.writerow(row)
+        print(f"[Metrics] Wrote new {csv_path}")
+        return
+
+    # Read the existing header. If a previous run added/removed metric columns,
+    # appending under the stale header would leave the file with rows wider than
+    # its header, and csv.DictReader silently misaligns every column past the
+    # first new one. So when the schema drifts we rewrite the whole file, keying
+    # old rows by name and back-filling missing cells, so header always matches.
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        existing = list(csv.reader(f))
+    existing_header = existing[0] if existing else []
+
+    if existing_header == fields:
+        with open(csv_path, "a", newline="", encoding="utf-8") as f:
+            csv.DictWriter(f, fieldnames=fields).writerow(row)
+        print(f"[Metrics] Appended run to {csv_path}")
+        return
+
+    merged = fields + [c for c in existing_header if c not in fields]
+    old_rows = [dict(zip(existing_header, r)) for r in existing[1:]]
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=merged, extrasaction="ignore")
+        writer.writeheader()
+        for r in old_rows:
+            writer.writerow({k: r.get(k, "") for k in merged})
+        writer.writerow({k: row.get(k, "") for k in merged})
+    print(f"[Metrics] Schema changed; rewrote {csv_path} with {len(merged)} columns")
 
 
 # ── Plots ─────────────────────────────────────────────────────────────────────
