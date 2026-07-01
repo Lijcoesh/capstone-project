@@ -1,0 +1,43 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.31
+  threshold source     : val-tuned (best F1=0.414 on VAL)
+  eval split=TEST   model=models/seizure_prediction_eeg/cnn_prediction_eeg.pt   epochs=50   seed=42
+============================================================
+  Precision      : 0.279
+  Recall (sens.) : 0.956
+  Specificity    : 0.156
+  F1             : 0.432
+  Accuracy       : 0.360   (misleading under imbalance)
+  Balanced acc   : 0.556
+  Confusion [tn fp fn tp]: [13688 74079 1325 28726]
+  @ thr 0.50 (legacy)  : P 0.356 / R 0.655 / F1 0.461  [52122 35645 10353 19698]
+
+  AUC-ROC        : 0.700   (0.50 = chance)
+  AUC-PR         : 0.479   (baseline 0.255 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.700            0.662  (n=4)
+     30s (30 win)      0.722            0.709  (n=4)
+     60s (60 win)      0.727            0.721  (n=4)
+    120s (120 win)     0.731            0.728  (n=4)
+
+  Over/underfit  : train F1 0.442  vs  test F1 0.432  (gap +0.010)
+
+  Threshold sweep (P / R / F1):
+    thr 0.20:  P 0.260   R 0.991   F1 0.412
+    thr 0.30:  P 0.277   R 0.962   F1 0.431
+    thr 0.31:  P 0.279   R 0.956   F1 0.432  <-- current
+    thr 0.40:  P 0.302   R 0.876   F1 0.449
+    thr 0.50:  P 0.356   R 0.655   F1 0.461
+    thr 0.60:  P 0.537   R 0.424   F1 0.474
+    thr 0.70:  P 0.710   R 0.170   F1 0.275
+    thr 0.80:  P 0.784   R 0.013   F1 0.025
+
+  Per-subject test (AUC = within-patient ranking quality):
+    sub-034:  AUC 0.739   P 0.311   R 0.932   F1 0.466   (n_preictal 9244 / 36635)
+    sub-039:  AUC 0.785   P 0.300   R 0.987   F1 0.460   (n_preictal 16473 / 55180)
+    sub-052:  AUC 0.450   P 0.181   R 0.869   F1 0.300   (n_preictal 3240 / 19440)
+    sub-055:  AUC 0.676   P 0.194   R 0.944   F1 0.322   (n_preictal 1094 / 6563)
+    mean per-subject AUC (subjects with positives): 0.662 ± 0.129  (n=4)
+============================================================

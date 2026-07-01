@@ -1,2 +1,2 @@
 feature_set,subject,auc,precision,recall,f1,n_preictal,n_test
-eeg,sub-039,0.7727,0.404,0.8165,0.5405,16473,55180
+eeg,sub-042,0.5843,0.2347,0.4132,0.2994,2880,15798

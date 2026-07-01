@@ -1,0 +1,40 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.51
+  threshold source     : val-tuned (best F1=0.346 on VAL)
+  eval split=TEST   model=models/seizure_prediction_eeg/cnn_prediction_eeg.pt   epochs=50   seed=42
+============================================================
+  Precision      : 0.223
+  Recall (sens.) : 0.998
+  Specificity    : 0.183
+  F1             : 0.364
+  Accuracy       : 0.338   (misleading under imbalance)
+  Balanced acc   : 0.591
+  Confusion [tn fp fn tp]: [2535 11293 6 3234]
+  @ thr 0.50 (legacy)  : P 0.222 / R 0.999 / F1 0.363  [2494 11334 4 3236]
+
+  AUC-ROC        : 0.866   (0.50 = chance)
+  AUC-PR         : 0.625   (baseline 0.190 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.866            0.866  (n=1)
+     30s (30 win)      0.909            0.909  (n=1)
+     60s (60 win)      0.921            0.921  (n=1)
+    120s (120 win)     0.941            0.941  (n=1)
+
+  Over/underfit  : train F1 0.484  vs  test F1 0.364  (gap +0.120)
+
+  Threshold sweep (P / R / F1):
+    thr 0.20:  P 0.192   R 1.000   F1 0.321
+    thr 0.30:  P 0.199   R 1.000   F1 0.332
+    thr 0.40:  P 0.213   R 1.000   F1 0.352
+    thr 0.50:  P 0.222   R 0.999   F1 0.363
+    thr 0.51:  P 0.223   R 0.998   F1 0.364  <-- current
+    thr 0.60:  P 0.231   R 0.993   F1 0.375
+    thr 0.70:  P 0.275   R 0.974   F1 0.429
+    thr 0.80:  P 0.705   R 0.452   F1 0.551
+
+  Per-subject test (AUC = within-patient ranking quality):
+    sub-015:  AUC 0.866   P 0.223   R 0.998   F1 0.364   (n_preictal 3240 / 17068)
+    mean per-subject AUC (subjects with positives): 0.866 ± 0.000  (n=1)
+============================================================
