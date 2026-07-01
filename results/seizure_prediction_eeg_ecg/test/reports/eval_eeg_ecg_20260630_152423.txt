@@ -1,0 +1,43 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg_ecg   threshold=0.36
+  threshold source     : val-tuned (best F1=0.410 on VAL)
+  eval split=TEST   model=models/seizure_prediction_eeg_ecg/cnn_prediction_eeg_ecg.pt   epochs=50   seed=42
+============================================================
+  Precision      : 0.268
+  Recall (sens.) : 0.926
+  Specificity    : 0.135
+  F1             : 0.416
+  Accuracy       : 0.337   (misleading under imbalance)
+  Balanced acc   : 0.531
+  Confusion [tn fp fn tp]: [11870 75897 2211 27840]
+  @ thr 0.50 (legacy)  : P 0.363 / R 0.687 / F1 0.475  [51548 36219 9412 20639]
+
+  AUC-ROC        : 0.692   (0.50 = chance)
+  AUC-PR         : 0.455   (baseline 0.255 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.692            0.638  (n=4)
+     30s (30 win)      0.720            0.666  (n=4)
+     60s (60 win)      0.724            0.670  (n=4)
+    120s (120 win)     0.729            0.677  (n=4)
+
+  Over/underfit  : train F1 0.426  vs  test F1 0.416  (gap +0.010)
+
+  Threshold sweep (P / R / F1):
+    thr 0.20:  P 0.255   R 0.996   F1 0.406
+    thr 0.30:  P 0.257   R 0.965   F1 0.406
+    thr 0.36:  P 0.268   R 0.926   F1 0.416  <-- current
+    thr 0.40:  P 0.294   R 0.865   F1 0.439
+    thr 0.50:  P 0.363   R 0.687   F1 0.475
+    thr 0.60:  P 0.522   R 0.431   F1 0.472
+    thr 0.70:  P 0.676   R 0.056   F1 0.103
+    thr 0.80:  P 0.000   R 0.000   F1 0.000
+
+  Per-subject test (AUC = within-patient ranking quality):
+    sub-034:  AUC 0.641   P 0.273   R 0.864   F1 0.415   (n_preictal 9244 / 36635)
+    sub-039:  AUC 0.809   P 0.303   R 0.977   F1 0.463   (n_preictal 16473 / 55180)
+    sub-052:  AUC 0.374   P 0.170   R 0.838   F1 0.283   (n_preictal 3240 / 19440)
+    sub-055:  AUC 0.728   P 0.189   R 0.951   F1 0.315   (n_preictal 1094 / 6563)
+    mean per-subject AUC (subjects with positives): 0.638 ± 0.164  (n=4)
+============================================================

@@ -1,0 +1,40 @@
+============================================================
+  EVALUATION REPORT   feature_set=eeg   threshold=0.62
+  threshold source     : val-tuned (best F1=0.417 on VAL)
+  eval split=TEST   model=models/per_subject/sub-042.pt   epochs=50   seed=42
+============================================================
+  Precision      : 0.235
+  Recall (sens.) : 0.413
+  Specificity    : 0.700
+  F1             : 0.299
+  Accuracy       : 0.647   (misleading under imbalance)
+  Balanced acc   : 0.556
+  Confusion [tn fp fn tp]: [9038 3880 1690 1190]
+  @ thr 0.50 (legacy)  : P 0.203 / R 0.855 / F1 0.328  [3242 9676 419 2461]
+
+  AUC-ROC        : 0.584   (0.50 = chance)
+  AUC-PR         : 0.273   (baseline 0.182 = positive rate)
+
+  Temporal aggregation (moving avg of p over time, per subject):
+    smoothing      pooled-AUC   mean-subject-AUC
+    raw (1 win)        0.584            0.584  (n=1)
+     30s (30 win)      0.636            0.636  (n=1)
+     60s (60 win)      0.651            0.651  (n=1)
+    120s (120 win)     0.666            0.666  (n=1)
+
+  Over/underfit  : train F1 0.424  vs  test F1 0.299  (gap +0.125)
+
+  Threshold sweep (P / R / F1):
+    thr 0.20:  P 0.199   R 0.998   F1 0.331
+    thr 0.30:  P 0.207   R 0.997   F1 0.343
+    thr 0.40:  P 0.213   R 0.986   F1 0.350
+    thr 0.50:  P 0.203   R 0.855   F1 0.328
+    thr 0.60:  P 0.211   R 0.486   F1 0.294
+    thr 0.62:  P 0.235   R 0.413   F1 0.299  <-- current
+    thr 0.70:  P 0.383   R 0.190   F1 0.254
+    thr 0.80:  P 0.750   R 0.006   F1 0.012
+
+  Per-subject test (AUC = within-patient ranking quality):
+    sub-042:  AUC 0.584   P 0.235   R 0.413   F1 0.299   (n_preictal 2880 / 15798)
+    mean per-subject AUC (subjects with positives): 0.584 ± 0.000  (n=1)
+============================================================
